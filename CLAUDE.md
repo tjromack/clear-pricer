@@ -57,6 +57,15 @@ works. **All ingestion downloads go through `curl`, or inject `truststore.inject
 - Update `DECISIONS.md` on every non-trivial choice (landing-to-staging model, drift handling, reconciliation logic,
   the served schema) with the rejected alternative and the why.
 
+## Session notes — the build journal (do this every session)
+
+`docs/BUILD-LOG.md` is the dated journal of this build. **Keep it current every session** — it is the primary raw
+material for the case study and any other writing, and it is near-impossible to reconstruct afterwards. Each working
+session appends (or updates today's) dated entry with: **what happened · decisions (→ also `DECISIONS.md`) · learnings ·
+what broke and the fix · what's open/next.** Write the *process and the judgment calls*, not just the numbers — the
+"what broke" moments and the reasoning are what the case study is made of. This is not optional cleanup at the end; it
+is part of each milestone's definition of done.
+
 ## Definition of done (per milestone)
 
 - The milestone's checklist in `TODO.md` is complete, and its **quality gate fails the DAG when it should**.
