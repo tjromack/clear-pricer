@@ -1,0 +1,49 @@
+# === Data — NEVER commit raw dumps, DB volumes, or published Parquet ===
+# The data subtrees are gitignored (only data/README.md is tracked); small fixtures live in
+# tests/fixtures/ (tracked), and the published Parquet ships via a GitHub Release, not the repo.
+/data/raw/
+/data/staging/
+/data/warehouse/
+/data/published/
+*.duckdb
+*.duckdb.wal
+*.db-shm
+*.db-wal
+/pgdata/
+
+# === dbt ===
+/dbt/target/
+/dbt/dbt_packages/
+/dbt/logs/
+
+# === Airflow ===
+/airflow/logs/
+/logs/
+airflow.db
+airflow.cfg
+webserver_config.py
+standalone_admin_password.txt
+
+# === Python ===
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# === Secrets / env ===
+.env
+.env.*
+!.env.example
+
+# === OS / editor ===
+.DS_Store
+Thumbs.db
+*.tmp
+.idea/
+.vscode/
