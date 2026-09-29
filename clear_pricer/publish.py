@@ -15,7 +15,8 @@ from pathlib import Path
 import duckdb
 
 TABLES = ("fct_standard_charges", "dim_charge_codes", "dim_modifiers", "rpt_source_conformance", "stg_hpt__files",
-          "rpt_nppes_file_log", "rpt_npi_resolution", "rpt_npi_completeness", "rpt_npi_reconciliation")  # the 9.8M-row NPPES registry itself is not re-served: CMS publishes it (CP-DEC 010)
+          "rpt_nppes_file_log", "rpt_npi_resolution", "rpt_npi_completeness", "rpt_npi_reconciliation",
+          "rpt_fhir_summary", "rpt_fhir_mapping", "rpt_fhir_code_bridge")  # the 9.8M-row NPPES registry itself is not re-served: CMS publishes it (CP-DEC 010)
 
 # (table, aggregate SQL valid in both DuckDB and Postgres)
 PARITY = {
@@ -30,6 +31,9 @@ PARITY = {
     "rpt_npi_completeness": "count(*), count(distinct npi), count(*) filter (where tier in (1, 2) and not disclosed), "
                             "sum(name_similarity)",
     "rpt_npi_reconciliation": "count(*), sum(disclosed_npis), sum(unresolved_npis), sum(undisclosed_candidates)",
+    "rpt_fhir_summary": "count(*), sum(resources), sum(mapped_paths), sum(structural_issues)",
+    "rpt_fhir_mapping": "count(*), sum(occurrences), count(*) filter (where mapped)",
+    "rpt_fhir_code_bridge": "count(*), sum(claim_lines), sum(codes_with_a_price_file_code)",
 }
 
 

@@ -385,3 +385,71 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 - **Milestone 5 (awaiting approval):** the Synthea FHIR R4 path (synthetic only, no PHI), with a mapping report.
 - Limitation to state in the case study: NPPES secondary practice locations (`pl_pfile`) aren't modelled, so
   completeness matches only primary practice addresses.
+
+---
+
+## 2026-09-29 — Milestone 5 (synthetic FHIR R4 path)
+
+### What happened
+- **Nothing needed from Trevor.** Synthea runs in a Java container (`eclipse-temurin:21-jre`) on the Docker already
+  running for Airflow, so there was no local Java install.
+- **Pinned the generator before using it.** Synthea **v4.0.0**, the tagged release rather than the moving
+  `master-branch-latest`, pinned by jar SHA-256 (`ed43c20a…`). Seed, clinician seed and reference date are fixed.
+  **Checked determinism rather than assuming it:** two 3-patient runs with the same arguments were byte-identical in
+  content. Only the hospital/practitioner directory *file names* differ, because they embed a wall-clock timestamp.
+- **Generated the population:** 200 living patients plus the deceased Synthea adds, 225 patient bundles and 2
+  directory bundles, 681 MB, in **22 s**. Regenerated through the new CLI: identical content.
+- **Built the parser around measured mapping.** Each resource is wrapped in a read-tracking view, and "mapped" means an
+  extractor actually read the leaf. Result: **240,237 resources across 24 types parsed in about 25 s**. 11 types are
+  modelled, and the other 13 are published at 0% rather than left out.
+- **Validation:**
+  - **0 structural issues** (R4 1..1 elements used, coding system+code, date formats).
+  - **1,200,521 of 1,200,521 references resolve** (889,570 bundle URNs, 267,345 conditional identifiers, 43,606
+    contained).
+  - **225 of 225 patients** pass the synthetic-marker gate.
+- **The no-PHI pin is now a gate.** `assert_fhir_synthetic_only` fails the run if any patient lacks Synthea's
+  identifier system, a 999-range SSN (a range the SSA never issues) or digit-suffixed names. An end-to-end test proves
+  a real-looking patient turns the run red. So does a dangling reference. Staging keeps only the marker *flags*: no
+  names, SSNs or street lines, even synthetic ones.
+- **Code bridge.** Synthea's claim lines are SNOMED (45,368), LOINC, RxNorm, CVX, ICD-10 and CDT. Price files are
+  CPT/HCPCS/CDT/MS-DRG/NDC/RC. Only dental CDT is shared: **862 of 69,580 synthetic claim lines (1.2%)** carry a code
+  that appears in a real price file (36 codes, 2 hospitals).
+- `stage_fhir` joined the DAG: a green Airflow run (`m5_fhir_1`), 78/78 gates, parity PASS. Three FHIR report tables
+  publish to Postgres (12 published tables in total). `clear-pricer report` now also regenerates
+  `docs/results/fhir-mapping.md`, byte-deterministically.
+
+### Decisions (→ CP-DEC 012)
+- Pinned, containerised, byte-deterministic generation; bundles ordered by content hash; mapping measured by
+  read-tracking; structural + referential validation (the HL7 FHIR Validator rejected as heavier than the need, and
+  it would validate Synthea against profiles it's built to); synthetic-only enforced as a gate; flags, not values,
+  for PHI-shaped fields.
+
+### Learnings
+- **FHIR "claims" and CMS price files barely share a vocabulary.** Synthetic claims bill clinical concepts (SNOMED);
+  hospitals publish billing codes (CPT/HCPCS). Only 1.2% of lines, all dental, could be priced directly. A real
+  claims-to-price join would need a SNOMED→CPT crosswalk, which is licensed content and out of scope.
+- **ExplanationOfBenefit is 94.7% unmapped**, and that's where the payment detail lives (adjudication categories
+  and amounts: 245k + 204k values). The measured mapping report makes it obvious which extension would add the most.
+- **One reference resolver isn't enough for FHIR.** The same dataset uses bundle URNs, conditional identifier
+  queries into *other* bundles, and `#contained` references.
+
+### What broke (+ fix)
+- **43,606 "dangling" references on the first parse.** They were `#coverage` / `#referral` *contained*-resource
+  references the resolver didn't know about, not real breaks. Resolved against each resource's `contained` ids, and
+  the gate now requires 100%.
+- **The clean-clone path broke.** M1's end-to-end test (`clear-pricer run rush`, no Synthea) failed because dbt read
+  FHIR staging files that didn't exist. `build` now writes empty FHIR staging tables when none exist, the same pattern
+  as the empty NPPES state DB. The try-it path needs no Synthea and no Docker.
+- **Practitioner `name` is a list (HumanName), not a string.** It would have staged a Python object, and it's
+  PHI-shaped anyway. It's no longer staged.
+- **The parser held all 681 MB of bundles in memory** just to sort them by hash. It now hashes to fix the order and
+  then reads one bundle at a time.
+- **The code bridge double-counted a claim line** whose CDT code appears in both hospitals' files (863 → 862). It now
+  counts distinct claim lines, republished.
+- **Shell heredocs choked on quotes in generated code** (twice this session); code files are now written directly.
+
+### Open / next
+- **Milestone 6 (awaiting approval):** publish + serve. That's the Parquet release (a GitHub Release), stranger-can-
+  query docs, and the hosted GitHub Actions schedule (CP-DEC 009). Supabase and FastAPI will need Trevor: a Supabase
+  project and credentials, and a decision on anything that costs money.
+- Candidate extension: map EOB adjudication (payment detail).

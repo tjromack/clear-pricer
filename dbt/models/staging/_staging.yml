@@ -28,3 +28,35 @@ models:
     description: One row per NPPES file application attempt, with change counts.
   - name: stg_nppes__drift
     description: NPPES header / parse drift per file.
+  - name: stg_fhir__bundles
+    description: Synthea FHIR R4 bundles (synthetic; no PHI by construction).
+  - name: stg_fhir__resources
+    description: Synthea FHIR R4 resources (synthetic; no PHI by construction).
+  - name: stg_fhir__patients
+    description: Synthea FHIR R4 patients (synthetic; no PHI by construction).
+  - name: stg_fhir__encounters
+    description: Synthea FHIR R4 encounters (synthetic; no PHI by construction).
+  - name: stg_fhir__conditions
+    description: Synthea FHIR R4 conditions (synthetic; no PHI by construction).
+  - name: stg_fhir__observations
+    description: Synthea FHIR R4 observations (synthetic; no PHI by construction).
+  - name: stg_fhir__procedures
+    description: Synthea FHIR R4 procedures (synthetic; no PHI by construction).
+  - name: stg_fhir__medication_requests
+    description: Synthea FHIR R4 medication_requests (synthetic; no PHI by construction).
+  - name: stg_fhir__claims
+    description: Synthea FHIR R4 claims (synthetic; no PHI by construction).
+  - name: stg_fhir__claim_items
+    description: Synthea FHIR R4 claim_items (synthetic; no PHI by construction).
+  - name: stg_fhir__eobs
+    description: Synthea FHIR R4 eobs (synthetic; no PHI by construction).
+  - name: stg_fhir__organizations
+    description: Synthea FHIR R4 organizations (synthetic; no PHI by construction).
+  - name: stg_fhir__references
+    description: Synthea FHIR R4 references (synthetic; no PHI by construction).
+  - name: stg_fhir__issues
+    description: Synthea FHIR R4 issues (synthetic; no PHI by construction).
+  - name: stg_fhir__mapping
+    description: Synthea FHIR R4 mapping (synthetic; no PHI by construction).
+  - name: stg_fhir__run
+    description: Synthea FHIR R4 run (synthetic; no PHI by construction).

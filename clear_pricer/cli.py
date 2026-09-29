@@ -7,6 +7,8 @@
     clear-pricer publish                       # copy the marts to Postgres + parity check           (Airflow task)
     clear-pricer nppes-sync [--reapply]        # NPPES: latest full + weeklies -> CDC history          (Airflow task)
     clear-pricer report                        # regenerate docs/results/npi-reconciliation.md from the warehouse
+    clear-pricer synthea-generate [-p 200]     # synthetic FHIR R4 population via Synthea in Docker (no PHI)
+    clear-pricer fhir-stage                    # parse + validate the Synthea bundles -> staging     (Airflow task)
 
 Exit code is non-zero if any step, dbt test, or parity check fails.
 """
@@ -38,6 +40,10 @@ def dbt_build(data_dir: Path) -> bool:
 
     warehouse_path(data_dir).parent.mkdir(parents=True, exist_ok=True)
     init_state(nppes_state_path(data_dir))  # an empty history is valid (HPT-only runs, clean clones)
+    if not (data_dir / "staging" / "fhir" / "run.parquet").exists():  # likewise an empty FHIR path
+        from clear_pricer.fhir import stage_dir
+
+        stage_dir(data_dir / "raw" / "synthea" / "output" / "fhir", data_dir / "staging" / "fhir", None)
     os.environ["CLEAR_PRICER_DUCKDB"] = warehouse_path(data_dir).as_posix()
     os.environ["CLEAR_PRICER_NPPES_DB"] = nppes_state_path(data_dir).as_posix()
     os.environ.setdefault("DO_NOT_TRACK", "1")
@@ -110,6 +116,25 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_synthea_generate(args: argparse.Namespace) -> int:
+    from clear_pricer.synthea import generate
+
+    generate(Path(args.data_dir).resolve() / "raw" / "synthea", population=args.population)
+    return 0
+
+
+def cmd_fhir_stage(args: argparse.Namespace) -> int:
+    from clear_pricer.fhir import stage_dir
+
+    data_dir = Path(args.data_dir).resolve()
+    out = data_dir / "raw" / "synthea" / "output"
+    manifest_path = out / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else None
+    counts = stage_dir(out / "fhir", data_dir / "staging" / "fhir", manifest)
+    print("[fhir]  " + "  ".join(f"{k}={v:,}" for k, v in counts.items()), flush=True)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="clear-pricer")
     p.add_argument("--data-dir", default=os.environ.get("CLEAR_PRICER_DATA_DIR", str(REPO / "data")))
@@ -128,6 +153,10 @@ def main(argv: list[str] | None = None) -> int:
     ns.add_argument("--reapply", action="store_true", help="re-apply already-applied files (idempotency proof)")
     ns.set_defaults(func=cmd_nppes_sync)
     sub.add_parser("report", help="regenerate the committed reconciliation figures").set_defaults(func=cmd_report)
+    sg = sub.add_parser("synthea-generate", help="generate the synthetic FHIR population (Docker)")
+    sg.add_argument("-p", "--population", type=int, default=200)
+    sg.set_defaults(func=cmd_synthea_generate)
+    sub.add_parser("fhir-stage", help="parse + validate Synthea bundles into staging").set_defaults(func=cmd_fhir_stage)
     args = p.parse_args(argv)
     return args.func(args)
 

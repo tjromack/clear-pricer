@@ -57,9 +57,14 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] Warehouse made self-contained (no views over absolute paths)
 - [x] **Gate:** the unresolved-NPI rate is a committed, reproducible figure. **stop**
 
-## Milestone 5 — Synthea FHIR ingestion path
-- [ ] Parse/map/validate synthetic FHIR R4 bundles (the clinical side; FHIR on the résumé, honestly, no PHI)
-- [ ] **Gate:** resources parsed + validated with a mapping report. **stop**
+## Milestone 5 — Synthea FHIR ingestion path ✅ (2026-09-29)
+- [x] Pinned, containerised, byte-deterministic Synthea v4.0.0 population (225 patients, 240,237 resources) — CP-DEC 012
+- [x] Parse/map/validate synthetic FHIR R4 bundles: 11 resource types modelled; structural + referential validation
+  (1,200,521 of 1,200,521 references resolve, 0 structural issues)
+- [x] Mapping report measured by read-tracking → `docs/results/fhir-mapping.md`; code bridge to price files (CDT only)
+- [x] **No-PHI gate:** every patient must carry Synthea's markers; a non-synthetic patient turns the run red (tested)
+- [x] `stage_fhir` in the DAG; FHIR reports published to Postgres with parity; clean-clone path still green
+- [x] **Gate:** resources parsed + validated with a mapping report. **stop**
 
 ## Milestone 6 — publish + serve
 - [ ] Published Parquet release (GitHub Release, not committed); DuckDB-local query docs

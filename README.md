@@ -53,6 +53,8 @@ clear-pricer run rush      # discover (cms-hpt.txt) -> fetch (curl) -> parse -> 
 clear-pricer run uchicago  # 42 MB JSON
 clear-pricer run nm        # Northwestern: a 5 GB JSON download, ~3 min to stream-parse (skip it to stay light)
 clear-pricer nppes-sync    # NPPES registry: 1.2 GB monthly + weekly deltas -> CDC history (~6 min first time)
+clear-pricer synthea-generate  # synthetic FHIR R4 population (Synthea in Docker; ~25 s) -- no PHI
+clear-pricer fhir-stage        # parse + validate it
 clear-pricer build         # re-run the dbt gates over everything loaded
 ```
 
@@ -75,6 +77,8 @@ print(c.sql('select rate_basis, count(*) from fct_standard_charges group by 1'))
 | `rpt_nppes_file_log` | every NPPES file applied, and what it changed (inserted / updated / deactivated / stale) |
 | `rpt_npi_reconciliation` | the headline: unresolved-NPI rate + disclosure coverage, per hospital and overall |
 | `rpt_npi_resolution` / `rpt_npi_completeness` | the evidence behind it, NPI by NPI |
+| `rpt_fhir_summary` / `rpt_fhir_mapping` | the synthetic FHIR path: what was parsed, what was mapped (measured), what wasn't |
+| `fct_fhir_claim_lines` / `rpt_fhir_code_bridge` | synthetic claim lines, and how many share a code system with real price files |
 
 Offline, or to watch a gate fail: `clear-pricer run rush --source-file tests/fixtures/broken_ragged_rows.csv`.
 
@@ -104,6 +108,9 @@ Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned i
   55.9% of its dollar-plus-percentage rates don't reconcile. See `rpt_source_conformance`.
 - **A schema-drift log** ([docs/schema-drift-log.md](docs/schema-drift-log.md)): what deviated upstream, when, and how
   the pipeline handled it.
+- **Synthetic FHIR, validated** ([docs/results/fhir-mapping.md](docs/results/fhir-mapping.md)): 240,237 Synthea
+  R4 resources; every one of 1,200,521 references resolves; a gate fails the run if any patient lacks Synthea's
+  synthetic markers (no PHI, by construction and by test).
 - **Idempotency, proven:** restaging a file yields byte-identical Parquet; re-applying every NPPES file leaves the
   9.86M-row history identical.
 

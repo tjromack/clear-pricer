@@ -1,10 +1,12 @@
 """clear-pricer: hospital price transparency pipeline (v1: three Chicago hospitals).
 
-    stage_<hospital> (x3) + nppes_sync  (parallel)  ->  dbt_build_gates  ->  publish_postgres
+    stage_<hospital> (x3) + nppes_sync + stage_fhir  (parallel)  ->  dbt_build_gates  ->  publish_postgres
 
 - stage_*: discover via cms-hpt.txt -> curl -> content-addressed landing -> parse -> staging Parquet.
   An unchanged upstream file is a no-op at landing and yields byte-identical staging (design pin 2).
 - nppes_sync: NPPES latest full + weekly deltas -> CDC type-2 history (a no-op when nothing new was published).
+- stage_fhir: parse + validate the synthetic Synthea FHIR R4 bundles (generated once, deterministically, by
+  `clear-pricer synthea-generate`; no PHI by construction, and a gate proves it).
 - dbt_build_gates: builds the DuckDB warehouse and runs every dbt test. Any failing test fails this task and
   therefore the run (design pin 4); publish never runs on a red build, so Postgres keeps the last gated build.
 - publish_postgres: copies the marts to the served Postgres and checks parity against DuckDB (design pin 5).
@@ -53,8 +55,10 @@ with DAG(
         retry_delay=timedelta(minutes=5),
         execution_timeout=timedelta(hours=2),
     )
+    stage_fhir = BashOperator(task_id="stage_fhir", bash_command=f"{CLI} fhir-stage",
+                              execution_timeout=timedelta(hours=1))
     gates = BashOperator(task_id="dbt_build_gates", bash_command=f"{CLI} build",
                          execution_timeout=timedelta(hours=1))
     publish = BashOperator(task_id="publish_postgres", bash_command=f"{CLI} publish",
                            execution_timeout=timedelta(hours=1))
-    [*stages, nppes_sync] >> gates >> publish
+    [*stages, nppes_sync, stage_fhir] >> gates >> publish

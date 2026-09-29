@@ -257,5 +257,34 @@ machine.
   the headline row adds up; the macros pass their unit checks. The rates themselves are published, never gated:
   they're findings, not failures.
 
+## CP-DEC 012 — The FHIR path: pinned Synthea, measured mapping, synthetic-only as a gate (2026-09-29)
+**Status:** Decided (Milestone 5).
+
+- **Generation is pinned and containerised.** Synthea **v4.0.0**, pinned by jar SHA-256, runs in `eclipse-temurin:21-jre`,
+  so no local Java is needed. Seed `20260929`, clinician seed `20260929`, reference date `2026-09-01`, 200 living
+  patients, Chicago IL. Output content is **byte-deterministic** (verified twice). Only the directory files'
+  *names* embed a wall-clock timestamp, so staging orders bundles by content hash, never by name. The
+  population is generated once on demand (`clear-pricer synthea-generate`); the DAG only *stages* it.
+  *Rejected:* the moving `master-branch-latest` build (not reproducible), and committing generated bundles (681 MB;
+  `data/` is gitignored and they regenerate exactly).
+- **"Mapped" is measured, not declared.** Each resource is wrapped in a read-tracking view, and a leaf counts as mapped
+  only if an extractor actually read it. The mapping report (`rpt_fhir_mapping`, `docs/results/fhir-mapping.md`)
+  therefore can't drift from the code. 11 of 24 resource types are modelled, and the other 13 are reported at 0%, not
+  hidden. *Rejected:* a hand-maintained mapping spec (it would go stale the first time an extractor changed).
+- **Validation = structural + referential, not full profile conformance.** Checks cover the R4 1..1 elements this
+  project uses, coding `system`+`code`, date formats, and **every reference resolving**: `urn:uuid` within its bundle,
+  conditional `Type?identifier=system|value` against the synthetic provider directory, and `#id` against `contained`.
+  *Rejected:* the HL7 FHIR Validator (a Java tool with full US Core profile validation). It's heavier than this
+  milestone's need and would validate Synthea against profiles it is built to, which proves little.
+- **No PHI, by construction, as a gate** (design pin 1). `assert_fhir_synthetic_only` fails the run unless *every*
+  Patient carries Synthea's identifier system, an SSN in the SSA-never-issued 999 range, and digit-suffixed names.
+  Tests prove one real-looking patient turns the run red. Staging keeps only those **flags**: no names, SSNs or
+  street lines, even though they're synthetic.
+- **Integrity gates vs. published findings,** as in CP-DEC 007. Unresolved references, non-bundle files, id-less
+  resources, and modelled resources lost between parse and table all fail the run. Missing optional content and
+  unmapped paths are published.
+- **The code bridge is measured, not assumed.** Synthea bills in SNOMED / LOINC / RxNorm / CVX / CDT / ICD-10; price
+  files in CPT / HCPCS / CDT / MS-DRG / NDC / RC. `rpt_fhir_code_bridge` states the only overlap (CDT) as numbers.
+
 ---
-*Next entry = CP-DEC 012.*
+*Next entry = CP-DEC 013.*
