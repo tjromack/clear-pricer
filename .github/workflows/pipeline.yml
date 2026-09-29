@@ -31,8 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -46,13 +46,13 @@ jobs:
       # NPPES history is CDC state: carried between runs in the Actions cache. If it was evicted, nppes-sync rebuilds
       # from the files CMS currently lists -- visible in rpt_nppes_file_log, never silent.
       - name: Restore NPPES state
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: /mnt/cp-data/warehouse/nppes_state.duckdb
           key: nppes-state-${{ github.run_id }}
           restore-keys: nppes-state-
       - name: Restore Synthea jar
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /mnt/cp-data/raw/synthea/bin
           key: synthea-jar-v4.0.0
@@ -68,7 +68,7 @@ jobs:
       - name: NPPES sync (CDC)
         run: clear-pricer nppes-sync
       - name: Save NPPES state
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: /mnt/cp-data/warehouse/nppes_state.duckdb
           key: nppes-state-${{ github.run_id }}

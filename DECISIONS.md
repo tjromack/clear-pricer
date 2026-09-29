@@ -286,5 +286,38 @@ machine.
 - **The code bridge is measured, not assumed.** Synthea bills in SNOMED / LOINC / RxNorm / CVX / CDT / ICD-10; price
   files in CPT / HCPCS / CDT / MS-DRG / NDC / RC. `rpt_fhir_code_bridge` states the only overlap (CDT) as numbers.
 
+## CP-DEC 013 — Serving: Parquet release for detail, Supabase free tier for the small set, FastAPI over Parquet (2026-09-29)
+**Status:** Decided (Trevor chose the free tier; Milestone 6).
+
+- **Three read paths, each for what it's good at:**
+  1. **The GitHub Release (Parquet)** is the full detail, including the 7.37M-row fact. It's queryable with DuckDB
+     straight over HTTPS, with no clone, account or credentials (design pin 5). Exports are byte-deterministic.
+     `manifest.json` pins the inputs (price-file hashes, NPPES files, Synthea version) and every output hash; its
+     fingerprint covers both, so a release is cut **exactly when the published data would change** (new upstream
+     data, or a logic fix that moves a number) and never otherwise.
+  2. **Supabase (free tier)** hosts the *served set*: the reconciliation/conformance/FHIR reports plus
+     `agg_code_prices` (49,404 rows), a few MB against a 500 MB limit. Its auto-generated REST API is the zero-ops
+     hosted endpoint. *Rejected:* Pro at $25/month to serve the full fact (the Parquet release already serves it
+     better). The upgrade triggers are recorded: serving the full fact over the API, a no-pause guarantee, or backups.
+     Switching is a connection string only.
+  3. **FastAPI over the release Parquet** (in-memory DuckDB, parameterised read-only SELECTs). It's self-hostable
+     anywhere the files are, with charge-level lookups by code. *Not yet deployed to a host:* that needs a hosting
+     decision (and possibly cost), deferred.
+- **Served tables are locked down on every publish.** Each served table gets row-level security, one read-only
+  policy and `SELECT` for `anon`/`authenticated`, applied **inside the same transaction as the schema swap** (a swap
+  drops grants and policies). Project settings: automatic RLS on, auto-expose new tables off; only the `published`
+  schema is exposed to the Data API.
+- **Credential hygiene is enforced in code.** DSNs come only from the environment or `.env` (gitignored), never the
+  command line. Every connection runs under `secrets.guard`, which strips passwords from driver errors, because
+  libpq echoes the full DSN when a connection fails. *Why:* this happened during setup (see BUILD-LOG); the fix is
+  regression-tested. Hosted runs read the DSN from a GitHub Actions secret the owner set directly.
+- **`agg_code_prices` keeps `rate_basis` as a grouping key**, so a consumer compares contracted dollars
+  (`rate_basis = 'dollar'`) and isn't silently mixing in chargemaster-percentage dollars (CP-DEC 006).
+- **Release-type gate:** Parquet has no 128-bit integer, so DuckDB writes HUGEINT as DOUBLE (counts became `8.0`).
+  No release table may carry a HUGEINT column.
+- **Hosted pipeline state:** the NPPES CDC history persists between GitHub runs in the Actions cache. If it's evicted,
+  the run rebuilds from the files CMS currently lists, and that shows in `rpt_nppes_file_log`. *Rejected:* a 1.5 GB
+  state file as a release asset (heavy daily upload), and rebuilding every run (history resets monthly).
+
 ---
-*Next entry = CP-DEC 013.*
+*Next entry = CP-DEC 014.*
