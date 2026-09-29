@@ -6,6 +6,21 @@ measured. Per `CLAUDE.md`, keeping this current is part of each milestone's defi
 
 Entry template: **What happened · Decisions · Learnings · What broke (+ fix) · Open/next.**
 
+## Index (kept current)
+
+| Milestone | Commit | Headline (measured) | The break worth telling |
+|---|---|---|---|
+| 0 · confirm files | `7c48393` | 3 hospitals, all CMS v3.0.0; NM = 5.02 GB JSON | UChicago JSON starts with a BOM; Rush's `cms-hpt.txt` URLs have no scheme |
+| 1 · Rush end to end | `86fe81d` | 208,409 rows, 0 quarantined; 3 broken fixtures each trip their gate | float-cent reconciliation mis-flagged 1,037 truncated dollars |
+| 2 · 3 hospitals + Airflow | `e2fcf35` | 7,371,416 rows; red DAG on bad input, Postgres untouched | 55.9% of NM's dual-rate dollars don't reconcile (1.40M = a zero-count median) |
+| 3 · NPPES CDC | `b4c379d` | 9.8M providers from 11.7 GB in 57 s; re-apply leaves 9,855,257-row history identical | the full file "through 09/13" carries 09/14 records; the idempotency proof caught a flip-flop |
+| 4 · NPI reconciliation | `736969e` | unresolved 0.0%; disclosure coverage 13.3% (52 candidates, 46–65 sensitivity) | views baked in absolute paths; the warehouse broke across host/container |
+| 5 · synthetic FHIR | `f5d2c42` | 240,237 resources; 1,200,521/1,200,521 refs resolve; no-PHI gate | 43,606 "dangling" refs were `#contained` references |
+| 6 · publish + serve | `ad54b89` | release fingerprint identical on GitHub runner and workstation; public | a DSN password leaked into a session (rotated; redaction added); Synthea not deterministic multi-threaded |
+
+Where things are: decisions → `DECISIONS.md` (CP-DEC 001–014) · upstream deviations → `docs/schema-drift-log.md` ·
+reproducible figures → `docs/results/` (`clear-pricer report`) · how to query → `docs/QUERY.md`.
+
 ---
 
 ## 2026-09-28 — Phase 0 (scaffold + kickoff)

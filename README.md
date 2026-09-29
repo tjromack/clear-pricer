@@ -30,9 +30,9 @@ schema-drift handling and referential-integrity reconciliation over real public 
 
 ## What it does (v1 → v2)
 
-- **v1 (in progress):** three Chicago hospitals — Northwestern Memorial, Rush, and University of Chicago Medical Center
+- **v1 (shipped 2026-09-29):** three Chicago hospitals — Northwestern Memorial, Rush, and University of Chicago Medical Center
   (7.37M published charge rows as of 2026-09-29) — through a scheduled pipeline with quality gates, published as queryable Parquet, runnable locally with no cloud
-  credentials.
+  credentials, rebuilt daily by a hosted GitHub Actions run.
 - **v2 (planned):** 50+ hospitals, NPPES reconciliation with a published unresolved-NPI rate, a public read API
   (FastAPI + Supabase), and a written analysis of price variation for the same CPT code across the Chicago metro.
 
@@ -108,7 +108,7 @@ gated build, and a parity check proves it matches DuckDB. To watch the gate fire
 ## How it's verified (the differentiator)
 
 Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned inputs):
-- **Quality gates that fail the run** (not warn): 56 dbt checks, covering row reconciliation, keys, enums, CMS
+- **Quality gates that fail the run** (not warn): 80 dbt checks, covering row reconciliation, keys, enums, CMS
   required columns, the CDC history's invariants and the reconciliation's own rules. A deliberately broken input turns
   the Airflow run red, and publish never runs (run `broken_input_proof_1`).
 - **NPI reconciliation, both directions** ([docs/results/npi-reconciliation.md](docs/results/npi-reconciliation.md)):
