@@ -1,5 +1,7 @@
 # clear-pricer
 
+[![ci](https://github.com/tjromack/clear-pricer/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/clear-pricer/actions/workflows/ci.yml) [![pipeline](https://github.com/tjromack/clear-pricer/actions/workflows/pipeline.yml/badge.svg)](https://github.com/tjromack/clear-pricer/actions/workflows/pipeline.yml)
+
 > © 2026 Trevor J. Romack — **MIT-licensed** ([LICENSE](LICENSE)) · tjromack@gmail.com
 
 **A cleaned, versioned, queryable view of public hospital price and provider data — with the reconciliation failures
@@ -40,7 +42,16 @@ schema-drift handling and referential-integrity reconciliation over real public 
 - Not a complete or authoritative price index — a documented, reproducible slice with its reconciliation failures stated.
 - No PHI, no real fee schedules beyond what hospitals publicly publish, no payer policy library.
 
-## Quickstart
+## Query it without cloning
+
+Every data release is Parquet on the [Releases page](https://github.com/tjromack/clear-pricer/releases), readable by DuckDB straight over HTTPS; the reports and a per-code price summary are also served read-only over REST. See **[docs/QUERY.md](docs/QUERY.md)**.
+
+```python
+import duckdb
+duckdb.sql("SELECT * FROM 'https://github.com/tjromack/clear-pricer/releases/latest/download/rpt_npi_reconciliation.parquet'").show()
+```
+
+## Quickstart (clone and run)
 
 No cloud credentials. Needs Python 3.11+ and `curl` (on PATH by default on Windows 10+, macOS and Linux).
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -37,7 +38,10 @@ def generate(root: Path, population: int = 200, log=lambda m: print(m, flush=Tru
             "--exporter.baseDirectory=/work/output", "--exporter.fhir.export=true",
             "--exporter.hospital.fhir.export=true", "--exporter.practitioner.fhir.export=true",
             "--exporter.csv.export=false", "--exporter.text.export=false", "Illinois", "Chicago"]
-    cmd = ["docker", "run", "--rm", "-v", f"{root.resolve().as_posix()}:/work", "-w", "/work", IMAGE,
+    # On Linux/macOS run as the calling user: the container otherwise writes root-owned output that the pipeline
+    # (e.g. the GitHub runner user) cannot then write its manifest into. Docker Desktop on Windows maps ownership itself.
+    user = ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"] if hasattr(os, "getuid") else []
+    cmd = ["docker", "run", "--rm", *user, "-v", f"{root.resolve().as_posix()}:/work", "-w", "/work", IMAGE,
            "java", "-jar", f"bin/{jar.name}", *args]
     log(f"[synthea] {SYNTHEA_VERSION} population={population} seed={SEED} reference={REFERENCE_DATE}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)

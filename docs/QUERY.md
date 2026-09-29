@@ -49,13 +49,24 @@ where it came from: `dollar` (contracted), `dollar_from_percent` (a percentage a
 
 ## 2. Hosted REST: the served tables (Supabase)
 
-The reports and the per-code price summary are served read-only over REST. The project URL and the public anon key
-are in the README; the key is public by design, and the tables are protected by row-level security (read-only).
+The reports and the per-code price summary are served read-only over REST (Supabase). The key below is Supabase's
+*publishable* key: public by design. The tables are protected by row-level security with a read-only policy; a write
+with this key is refused (`permission denied`).
 
 ```bash
-curl "https://<project>.supabase.co/rest/v1/agg_code_prices?code=eq.99213&rate_basis=eq.dollar" \
-  -H "apikey: <anon key>" -H "Accept-Profile: published"
+KEY=sb_publishable_uTjkQpUS8W5SgcMPKITQbw_oN3Pu4Qf
+
+# the NPI reconciliation headline
+curl "https://inznkisgrqutqcfzujwi.supabase.co/rest/v1/rpt_npi_reconciliation?order=hospital_id" -H "apikey: $KEY" -H "Accept-Profile: published"
+
+# one code across the hospitals, contracted dollars only
+curl "https://inznkisgrqutqcfzujwi.supabase.co/rest/v1/agg_code_prices?code=eq.99213&rate_basis=eq.dollar" -H "apikey: $KEY" -H "Accept-Profile: published"
 ```
+
+Served tables: `agg_code_prices`, `rpt_npi_reconciliation`, `rpt_npi_resolution`, `rpt_npi_completeness`,
+`rpt_source_conformance`, `files`, `rpt_nppes_file_log`, `dim_modifiers`, `rpt_fhir_summary`, `rpt_fhir_mapping`,
+`rpt_fhir_code_bridge`. Filtering and paging follow PostgREST syntax (`?col=eq.value`, `&limit=`, `&offset=`); at most
+1,000 rows per request. The full detail is in the Parquet release (section 1).
 
 ## 3. Clone and run it
 
