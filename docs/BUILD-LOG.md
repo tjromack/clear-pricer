@@ -17,7 +17,7 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 4 · NPI reconciliation | `736969e` | unresolved 0.0%; disclosure coverage 13.3% (52 candidates, 46–65 sensitivity) | views baked in absolute paths; the warehouse broke across host/container |
 | 5 · synthetic FHIR | `f5d2c42` | 240,237 resources; 1,200,521/1,200,521 refs resolve; no-PHI gate | 43,606 "dangling" refs were `#contained` references |
 | 6 · publish + serve | `ad54b89` | release fingerprint identical on GitHub runner and workstation; public | a DSN password leaked into a session (rotated; redaction added); Synthea not deterministic multi-threaded |
-| 7 · the analysis | (M7 commit) | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
+| 7 · the analysis | `b9d46f3` | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
 
 Where things are: decisions → `DECISIONS.md` (CP-DEC 001–015) · upstream deviations → `docs/schema-drift-log.md` ·
 reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · how to query → `docs/QUERY.md`.
