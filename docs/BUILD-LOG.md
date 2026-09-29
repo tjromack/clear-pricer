@@ -161,3 +161,89 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 - **Clean-clone check passed (after commit `86fe81d`):** `git clone` → fresh venv → `pip install -e ".[dev]"` →
   `clear-pricer run rush` fetched live, staged 208,409 rows and passed 31/31 gates; `pytest` 57/57. No credentials used.
   Automating this as a GitHub Action is M8.
+
+---
+
+## 2026-09-29 — Milestone 2 (all three hospitals, Airflow DAG with failing gates, Postgres parity)
+
+### What happened
+- **Environment check first.** Docker 28.3 with 16 CPUs and 33 GB. Host ports 5432 and 8080 were already taken by
+  other local stacks (`clinical_trials_db`, nba-parquet's Airflow), so clear-pricer uses **5433/8081** and leaves
+  them alone. I then tested the proxy from *inside* a container: image pulls, `pip`, and Python HTTPS (status 200)
+  all work. **The TLS-proxy problem is host-only**, and the containers need no certificate workaround.
+- **Streaming everywhere.** M1's parser held all rows in lists, which can't work for NM's 7M rows. Refactored both
+  parsers into generators around a shared row builder (`normalise.py`), so the CP-DEC 006 rules apply identically to
+  CSV and JSON. Staging now streams 100k-row batches to Parquet. Wrote the JSON parser against the **official v3 JSON
+  schema** (fetched from `CMSgov/hospital-price-transparency`), not against what the files happened to contain.
+- **Changed the grain for codes.** JSON codes belong to an item that has about 60 payer rows at NM. Keyed by charge
+  row, NM's 372,886 codes would have become about 20M rows. Codes now key to `item_id`.
+- **All three hospitals end to end:** Rush 208,409 + UChicago 136,857 + NM 7,026,150 = **7,371,416 charge rows**,
+  1,092,359 codes, 37 modifier rules, **0 quarantined**, 34/34 dbt nodes green. NM: 5 GB of JSON → 109 MB of Parquet;
+  the first run took 6m20s including the download.
+- **ETag conditional fetch.** Every NM stage would have re-downloaded 5 GB. NM and UChicago send ETags (Rush doesn't),
+  so `curl --etag-compare` turns an unchanged file into a `304`. The NM re-stage then took 2m45s of parsing and no
+  download. The content hash stays the identity.
+- **Airflow 3.3.2 + Postgres 16 in Docker**, with the pipeline in its own virtualenv inside the image. DAG:
+  `stage_{rush,uchicago,nm}` → `dbt_build_gates` → `publish_postgres`.
+  - **Green run** (`scheduled__2026-09-29`): 4m34s. Inside the container, UChicago and NM got `304` and reused the
+    files the *host* had landed, so the two environments share one landing zone. Parity passed in the container too.
+  - **Red run** (`broken_input_proof_1`, conf `{"source_overrides": {"rush": "tests/fixtures/broken_ragged_rows.csv"}}`):
+    `stage_rush` quarantined 2 of 20 rows, **`dbt_build_gates` failed** on `assert_quarantine_within_tolerance`, and
+    `publish_postgres` was **`upstream_failed`**. Postgres was unchanged before and after: 7,371,416 rows and the same
+    three source SHA-256s. A bad input can't reach the served store.
+  - A clean restore run (`restore_after_proof_1`) followed.
+- **Parity:** DuckDB and Postgres agree exactly on counts and distinct keys for all five published tables. Money sums
+  (e.g. Σ `negotiated_rate` = 29,076,008,619.41) differ only in the 11th significant digit, because each engine adds
+  7M floats in a different order. The check uses a 1e-9 relative tolerance for sums and exact equality for counts.
+
+### Decisions (→ CP-DEC 008)
+- Streaming parsers; codes at item grain; ETag conditional download with the hash as identity; staging written
+  aside and swapped in; Airflow 3 + LocalExecutor + a separate pipeline venv; publish = copy → atomic schema swap →
+  native-SQL parity; Postgres only ever holds a gated build.
+
+### Learnings
+- **NM's "negotiated dollars" are mostly not derivable from its own file**, the most important finding so far.
+  2.70M dual rows reconcile as pct × gross, but **3.92M (55.9%) don't**:
+  - 1.40M equal the *median allowed amount*, a median NM reports over **zero** claims;
+  - 2.51M match neither pct × gross nor the median (e.g. gross $833.02 at "100% of billed charges" → $395.91).
+
+  Only **4,140** NM rows are plain contracted dollars. The CP-DEC 006 `rate_basis` label already isolates every case,
+  so nothing is mixed silently, but it means NM's clean coverage for the M7 comparison is thin, and that has to be
+  stated.
+- **The classifier was missing a CPT category.** 13 UChicago codes (`0002M`–`0019M`) are CPT **MAAA** codes (4 digits
+  + `M`). Added `CPT_MAAA`. The one genuine anomaly, `7746A`, stays `UNCLASSIFIED` and is published.
+- **Real 3-hospital conformance ledger** (`rpt_source_conformance`):
+
+  | Hospital | Zero-count medians | Unreconciled dual rates | Code type conflicts | Other |
+  |---|---|---|---|---|
+  | NM | 6,523,094 (92.8%) | 3,924,918 (55.9%) | 1,037 | — |
+  | Rush | 72,831 (34.9%) | 5,190 (2.5%) | 0 | scheme-less `cms-hpt.txt` URLs |
+  | UChicago | 0 | 0 | 1 (`7746A`) | UTF-8 BOM |
+
+  UChicago publishes the most spec-clean file, but only 30% of its items carry a payer-specific rate.
+
+### What broke (+ fix)
+- **Image build: `Permission denied: '/opt/cp-venv'`.** The `airflow` user can't create directories under `/opt`.
+  Created and `chown`ed the directory as root, then switched back to `airflow`.
+- **Compose `depends_on` silently lost Postgres.** YAML merge keys (`<<: *airflow`) are shallow, so each service's own
+  `depends_on` *replaced* the anchor's. Caught by reading the config before starting it; the dependency is now
+  restated per service.
+- **JSON builder bug, caught before the first run.** Inside a top-level object (e.g. `license_information`), ijson's
+  `map_key` events share the object's prefix, so my "value finished" check would have closed the object at its first
+  key. Only `end_*`/scalar events close a value now, and a test with top-level keys in a different order pins it.
+- **Absolute paths in manifests.** `latest.json` stored `C:\dev\...`, which doesn't exist inside the container
+  (`/opt/clear-pricer`). Manifests now store paths relative to `data/`. A one-time migration seeded `latest.json` and
+  the ETag for files landed before this change, using each file's own manifest and saved response headers, and deleted
+  the M0 flat copies after confirming they were SHA-256-identical to the hash-addressed files (about 5.1 GB freed).
+- **Publish: `cannot execute DROP SCHEMA in a read-only transaction`.** Opening the DuckDB warehouse read-only made
+  *every* attachment read-only, Postgres included. Fix: an in-memory DuckDB session that attaches the warehouse
+  `READ_ONLY` and Postgres read-write.
+- **Parity: `duplicate column name "count"`.** `postgres_query` returned several aggregates all named `count`. Each is
+  now aliased `m0..mN`.
+- **A test expectation was wrong, not the code:** an unmapped key on a `standard_charges` object is logged once per
+  object, not once per payer row, while the value is still kept on every row.
+
+### Open / next
+- **Milestone 3 (awaiting approval):** NPPES full replace + weekly delta with change-data capture. The NPPES monthly
+  file is multi-GB (size to be measured in M3), and the same streaming/ETag patterns apply.
+- For M7: a sub-flag for "dollar equals a zero-count median", and stating NM's thin clean coverage.

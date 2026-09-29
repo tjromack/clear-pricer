@@ -25,3 +25,19 @@ def test_clean_sample_passes(tmp_path):
 ])
 def test_broken_input_fails_the_run(tmp_path, fixture):
     assert _run(tmp_path, fixture) == 1
+
+
+@pytest.mark.parametrize("hospital,fixture", [("rush", "rush_sample.csv"), ("uchicago", "cms_v3_json_example.json")])
+def test_restaging_is_byte_identical(tmp_path, hospital, fixture):
+    """Design pin 2: the same landed file yields byte-identical staging Parquet, run after run."""
+    import hashlib
+
+    data = tmp_path / "data"
+
+    def snapshot() -> dict[str, str]:
+        assert main(["--data-dir", str(data), "stage", hospital, "--source-file", str(FIX / fixture)]) == 0
+        out = data / "staging" / "hpt" / hospital
+        return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(out.glob("*.parquet"))}
+
+    first, second = snapshot(), snapshot()
+    assert first == second and len(first) == 6

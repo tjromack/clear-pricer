@@ -29,7 +29,7 @@ schema-drift handling and referential-integrity reconciliation over real public 
 ## What it does (v1 → v2)
 
 - **v1 (in progress):** three Chicago hospitals — Northwestern Memorial, Rush, and University of Chicago Medical Center
-  — through a scheduled pipeline with quality gates, published as queryable Parquet, runnable locally with no cloud
+  (7.37M published charge rows as of 2026-09-29) — through a scheduled pipeline with quality gates, published as queryable Parquet, runnable locally with no cloud
   credentials.
 - **v2 (planned):** 50+ hospitals, NPPES reconciliation with a published unresolved-NPI rate, a public read API
   (FastAPI + Supabase), and a written analysis of price variation for the same CPT code across the Chicago metro.
@@ -50,6 +50,8 @@ python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\
 pip install -e ".[dev]"
 
 clear-pricer run rush      # discover (cms-hpt.txt) -> fetch (curl) -> parse -> stage -> dbt build + gates
+clear-pricer run uchicago  # 42 MB JSON
+clear-pricer run nm        # Northwestern: a 5 GB JSON download, ~3 min to stream-parse (skip it to stay light)
 ```
 
 The run exits non-zero if any quality gate fails. Then query the local DuckDB warehouse:
@@ -64,10 +66,21 @@ print(c.sql('select rate_basis, count(*) from fct_standard_charges group by 1'))
 | `fct_standard_charges` | one row per source charge row; `negotiated_rate` + `rate_basis` (where the dollar came from) |
 | `dim_charge_codes` | every billing code, declared type kept verbatim + `code_family` derived from the code's shape |
 | `rpt_source_conformance` | what each source file got wrong against the CMS v3 dictionary, and how often |
+| `dim_modifiers` | payer-specific modifier rules published at file level (JSON sources) |
 | `stg_hpt__files` | one row per source file: SHA-256, template version, Type-2 NPIs, row counts |
 
 Offline, or to watch a gate fail: `clear-pricer run rush --source-file tests/fixtures/broken_ragged_rows.csv`.
-v1 status: Rush is end to end (Milestone 1); UChicago and Northwestern land in Milestone 2.
+
+### Scheduled + served (optional: Docker)
+
+```bash
+docker compose up -d       # Postgres 16 (localhost:5433) + Airflow 3 (http://localhost:8081, local dev: no login)
+```
+
+The `clear_pricer_hpt` DAG runs daily: `stage_{rush,uchicago,nm}` → `dbt_build_gates` → `publish_postgres`.
+A failing gate turns the run red and **publish never runs**, so the served `published` schema always holds the last
+gated build, and a parity check proves it matches DuckDB. To watch the gate fire, trigger the DAG with
+`{"source_overrides": {"rush": "tests/fixtures/broken_ragged_rows.csv"}}`. The DuckDB path above needs none of this.
 
 ## How it's verified (the differentiator)
 

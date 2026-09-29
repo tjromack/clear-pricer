@@ -31,11 +31,12 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] DuckDB-local mode: clone → one command (`clear-pricer run rush`) → query `fct_standard_charges` (no cloud creds); staged Parquet byte-identical across re-runs
 - [x] first `docs/schema-drift-log.md` entry (M0 wrote six; M1 closed their handling + added the truncation entry). **Gate:** one file clean end-to-end with a failing-capable gate. **stop**
 
-## Milestone 2 — the Airflow DAG with failing gates (all three hospitals)
-- [ ] JSON parser (streaming, `ijson`) for UChicago + NM; BOM handling on the JSON path
-- [ ] Airflow DAG: fetch → parse → stage → dbt test, scheduled, idempotent
-- [ ] Quality gates fail the DAG (not warn); a deliberately-broken input proves the gate fires
-- [ ] Postgres (Docker) served parity with DuckDB-local. **Gate:** a red DAG on bad input. **stop**
+## Milestone 2 — the Airflow DAG with failing gates (all three hospitals) ✅ (2026-09-29)
+- [x] JSON parser (streaming, `ijson`) for UChicago + NM; BOM handling on the JSON path; item grain for codes (CP-DEC 008)
+- [x] ETag conditional download (unchanged 5 GB NM file = one 304) + portable manifests
+- [x] Airflow 3.3.2 DAG: stage ×3 → dbt build (gates) → publish; `@daily`; byte-identical restaging (tested)
+- [x] Quality gates fail the DAG (not warn); run `broken_input_proof_1` went red at `dbt_build_gates` and publish was `upstream_failed`
+- [x] Postgres (Docker) served parity with DuckDB-local: a gated publish plus a parity check that fails the task on mismatch. **Gate:** a red DAG on bad input. **stop**
 
 ## Milestone 3 — NPPES incremental load + CDC
 - [ ] NPPES full replace + weekly delta ingestion; change-data-capture (not truncate-and-reload)

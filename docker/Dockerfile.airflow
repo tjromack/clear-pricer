@@ -1,0 +1,14 @@
+# Airflow 3 + the clear-pricer pipeline in its own virtualenv (dbt / DuckDB pins never fight Airflow's constraints).
+FROM apache/airflow:3.3.2-python3.12
+
+USER root
+RUN mkdir -p /opt/cp-venv && chown airflow: /opt/cp-venv
+USER airflow
+COPY requirements.lock /tmp/requirements.lock
+RUN python -m venv /opt/cp-venv \
+ && /opt/cp-venv/bin/pip install --no-cache-dir -r /tmp/requirements.lock \
+ && /opt/cp-venv/bin/python -c "import duckdb; duckdb.sql('INSTALL postgres')"
+
+# The repo is bind-mounted at /opt/clear-pricer; the package is imported from there (no rebuild per code change).
+ENV CLEAR_PRICER_PY=/opt/cp-venv/bin/python \
+    PYTHONPATH=/opt/clear-pricer

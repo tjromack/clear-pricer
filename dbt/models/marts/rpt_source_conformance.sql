@@ -8,7 +8,7 @@ select
     d."column",
     d.n,
     round(d.n / nullif(f.records_read, 0), 6) as share_of_records,
-    d.first_record,
+    d.first_locator,
     d.sample_value
 from {{ ref('stg_hpt__drift') }} d
 join {{ ref('stg_hpt__files') }} f using (hospital_id, source_sha256)

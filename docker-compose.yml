@@ -1,0 +1,82 @@
+# clear-pricer local stack: served Postgres + Airflow 3 (LocalExecutor).
+#   docker compose up -d        -> Airflow UI http://localhost:8081 (local dev: every user is admin, no login)
+#                                  Postgres  localhost:5433  db=clear_pricer  user=clear_pricer
+# Host ports 5433/8081 (not 5432/8080) so this runs beside other local stacks.
+# Credentials here are local-only defaults; override in .env (gitignored). Nothing here touches a cloud service.
+
+x-airflow: &airflow
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.airflow
+  image: clear-pricer/airflow:3.3.2
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://clear_pricer:${POSTGRES_PASSWORD:-clear_pricer_local}@postgres:5432/airflow
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-clear-pricer-local-dev-only}
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "True"
+    CLEAR_PRICER_DATA_DIR: /opt/clear-pricer/data
+    CLEAR_PRICER_PG_DSN: host=postgres port=5432 dbname=clear_pricer user=clear_pricer password=${POSTGRES_PASSWORD:-clear_pricer_local}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - .:/opt/clear-pricer
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: clear_pricer
+      POSTGRES_USER: clear_pricer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clear_pricer_local}
+    ports: ["5433:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "clear_pricer"]
+      interval: 5s
+      retries: 20
+
+  airflow-init:
+    <<: *airflow
+    command: ["bash", "-c", "airflow db migrate"]
+    restart: "no"
+
+  airflow-apiserver:
+    <<: *airflow
+    command: api-server
+    ports: ["8081:8080"]
+    depends_on:  # merge keys are shallow: restate postgres, or this list replaces the anchor's
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow
+    command: scheduler
+    depends_on:  # merge keys are shallow: restate postgres, or this list replaces the anchor's
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow
+    command: dag-processor
+    depends_on:  # merge keys are shallow: restate postgres, or this list replaces the anchor's
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  airflow-logs:

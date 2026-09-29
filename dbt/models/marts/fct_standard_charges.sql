@@ -1,12 +1,14 @@
 -- Published grain: one row per source charge row (item x setting x payer/plan), all hospitals.
+-- CSV tall: one row per data record. JSON: one row per payers_information entry (or one no_payer row).
 -- negotiated_rate is the dollar price when the source gives one; rate_basis says where it came from (CP-DEC 006).
 select
     c.charge_id,
+    c.item_id,
     c.hospital_id,
     f.hospital_name,
     f.last_updated_on as source_last_updated_on,
     c.source_sha256,
-    c.source_record,
+    c.source_locator,
     c.description,
     c.setting,
     c.billing_class,
@@ -35,6 +37,7 @@ select
     c.min_charge,
     c.max_charge,
     c.additional_generic_notes,
+    c.additional_payer_notes,
     c.unmapped_json
 from {{ ref('stg_hpt__charges') }} c
 join {{ ref('stg_hpt__files') }} f using (hospital_id, source_sha256)

@@ -53,6 +53,8 @@ def test_resolve_rate(dollar, pct, algo, gross, payer, rate, basis):
     ("99213", "HCPCS", "CPT_CAT_I", None),      # Rush pattern
     ("3074F", "CPT", "CPT_CAT_II", None),
     ("0001U", "cpt", "CPT_PLA", None),          # case-insensitive enum
+    ("0018M", "HCPCS", "CPT_MAAA", None),       # UChicago: MAAA codes typed HCPCS
+    ("7746A", "HCPCS", "UNCLASSIFIED", "hcpcs_declared_unclassified"),  # UChicago: fits no standard shape
     ("J1885", "HCPCS", "HCPCS_II", None),
     ("A4216", "CPT", "HCPCS_II", "cpt_declared_not_cpt"),  # NM pattern
     ("D0120", "HCPCS", "CDT", None),

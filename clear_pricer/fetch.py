@@ -4,6 +4,8 @@ All HTTP goes through `curl` (OS trust store) because this machine's TLS-inspect
 (CP-DEC 004). Landing is idempotent: a file is stored at raw/hpt/<hospital>/<sha256[:16]>/<filename>, so
 re-fetching an unchanged file is a no-op, and a changed file lands beside the old one (never overwritten).
 Change detection is by content hash, not HTTP headers (Rush sends neither Content-Length nor Last-Modified).
+Where a server sends an ETag (NM, UChicago), the download is conditional: a 304 reuses the last landed file, so an
+unchanged 5 GB file costs one request, not 5 GB. The hash stays the identity; the ETag only skips the transfer.
 """
 
 from __future__ import annotations
@@ -37,14 +39,18 @@ class LandedFile:
     fixes: tuple[str, ...]  # discovery corrections, surfaced as drift by staging
 
 
-def _curl(url: str, out: Path, headers: Path | None = None) -> None:
+def _curl(url: str, out: Path, headers: Path | None = None, etag: Path | None = None, compare: bool = False) -> int:
+    """Returns the final HTTP status. With `etag`, saves the response ETag there; with `compare`, sends it."""
     cmd = ["curl", "-sS", "-L", "--fail", "--retry", "3", "-A", "clear-pricer/0.1 (+github.com/tjromack/clear-pricer)",
-           "-o", str(out), url]
+           "-w", "%{http_code}", "-o", str(out)]
     if headers is not None:
-        cmd[1:1] = ["-D", str(headers)]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+        cmd += ["-D", str(headers)]
+    if etag is not None:
+        cmd += (["--etag-compare", str(etag)] if compare else []) + ["--etag-save", str(etag)]
+    proc = subprocess.run(cmd + [url], capture_output=True, text=True)
     if proc.returncode != 0:
         raise FetchError(f"curl failed ({proc.returncode}) for {url}: {proc.stderr.strip()}")
+    return int(proc.stdout.strip()[-3:] or 0)
 
 
 def _sha256(path: Path) -> str:
@@ -63,6 +69,11 @@ def _filename(url: str, headers_text: str) -> str:
     return Path(unquote(urlparse(url).path)).name or "mrf"
 
 
+def _portable(landed: LandedFile, data_dir: Path) -> dict:
+    """Manifest form: path relative to data_dir, so host and container (different mount points) agree."""
+    return asdict(landed) | {"path": Path(landed.path).relative_to(data_dir).as_posix()}
+
+
 def _land(hospital_id: str, tmp: Path, filename: str, url: str | None, fixes: tuple[str, ...],
           data_dir: Path) -> LandedFile:
     sha = _sha256(tmp)
@@ -76,7 +87,7 @@ def _land(hospital_id: str, tmp: Path, filename: str, url: str | None, fixes: tu
     landed = LandedFile(hospital_id, str(dest), filename, sha, dest.stat().st_size, url, fixes)
     manifest = dest_dir / "landing.json"
     if not manifest.exists():  # first-seen time is written once; re-runs don't rewrite it
-        record = asdict(landed) | {"first_seen_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        record = _portable(landed, data_dir) | {"first_seen_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
         manifest.write_text(json.dumps(record, indent=2), encoding="utf-8")
     return landed
 
@@ -92,10 +103,22 @@ def fetch(h: Hospital, data_dir: Path) -> LandedFile:
     if entry is None:
         raise FetchError(f"{h.site}/cms-hpt.txt has no location-name {h.location_name!r}")
 
-    tmp, hdr = incoming / "download.part", incoming / "headers.txt"
-    _curl(entry.mrf_url, tmp, headers=hdr)
+    tmp, hdr, etag, latest = (incoming / "download.part", incoming / "headers.txt", base / "etag.txt",
+                              base / "latest.json")
+    prev = json.loads(latest.read_text(encoding="utf-8")) if latest.exists() else None
+    if prev:
+        prev["path"] = str(data_dir / prev["path"])
+    can_compare = bool(prev and prev["source_url"] == entry.mrf_url and Path(prev["path"]).exists()
+                       and etag.exists() and etag.read_text().strip())
+    status = _curl(entry.mrf_url, tmp, headers=hdr, etag=etag, compare=can_compare)
+    if status == 304 and can_compare:
+        tmp.unlink(missing_ok=True)
+        print(f"[fetch] {h.id}: 304 Not Modified (ETag) -- reusing {prev['sha256'][:16]}", flush=True)
+        return LandedFile(**(prev | {"fixes": tuple(entry.fixes)}))
     filename = _filename(entry.mrf_url, hdr.read_text(encoding="latin-1"))
-    return _land(h.id, tmp, filename, entry.mrf_url, entry.fixes, data_dir)
+    landed = _land(h.id, tmp, filename, entry.mrf_url, entry.fixes, data_dir)
+    latest.write_text(json.dumps(_portable(landed, data_dir), indent=2), encoding="utf-8")
+    return landed
 
 
 def land_local(hospital_id: str, source: Path, data_dir: Path) -> LandedFile:

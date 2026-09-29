@@ -5,6 +5,8 @@ models:
     columns:
       - name: charge_id
         tests: [unique, not_null]
+      - name: item_id
+        tests: [not_null]
       - name: hospital_id
         tests:
           - not_null
@@ -36,17 +38,17 @@ models:
 
   - name: dim_charge_codes
     columns:
-      - name: charge_id
+      - name: item_id
         tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('fct_standard_charges')
-                field: charge_id
+                field: item_id
       - name: code
         tests: [not_null]
       - name: code_family
         tests:
           - accepted_values:
               arguments:
-                values: [CPT_CAT_I, CPT_CAT_II, CPT_CAT_III, CPT_PLA, HCPCS_II, CDT, UNCLASSIFIED]
+                values: [CPT_CAT_I, CPT_CAT_II, CPT_CAT_III, CPT_PLA, CPT_MAAA, HCPCS_II, CDT, UNCLASSIFIED]

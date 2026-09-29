@@ -133,11 +133,12 @@ def resolve_rate(
 
 # --- code family: classify by the code's shape, not the declared type ---------------------------
 # HCPCS Level I *is* CPT (AMA): Category I = 5 digits; Category II = 4 digits + F; Category III = 4 digits + T;
-# PLA (proprietary lab analyses) = 4 digits + U. HCPCS Level II (CMS) = one letter + 4 digits, where
+# PLA (proprietary lab analyses) = 4 digits + U; MAAA (multianalyte assays with algorithmic analyses) = 4 digits + M.
+# HCPCS Level II (CMS) = one letter + 4 digits, where
 # D-codes are CDT (dental). So "CPT typed as HCPCS" is technically valid; "A1234 typed as CPT" is not.
 
 CODE_FAMILIES = frozenset({
-    "CPT_CAT_I", "CPT_CAT_II", "CPT_CAT_III", "CPT_PLA", "HCPCS_II", "CDT", "UNCLASSIFIED",
+    "CPT_CAT_I", "CPT_CAT_II", "CPT_CAT_III", "CPT_PLA", "CPT_MAAA", "HCPCS_II", "CDT", "UNCLASSIFIED",
 })
 
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -145,6 +146,7 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("CPT_CAT_II", re.compile(r"\d{4}F")),
     ("CPT_CAT_III", re.compile(r"\d{4}T")),
     ("CPT_PLA", re.compile(r"\d{4}U")),
+    ("CPT_MAAA", re.compile(r"\d{4}M")),
     ("CDT", re.compile(r"D\d{4}")),
     ("HCPCS_II", re.compile(r"[A-CEGHJ-MP-V]\d{4}")),
 )

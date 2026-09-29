@@ -20,3 +20,5 @@ models:
     description: The parser's unmappable-field / drift log, aggregated per (kind, column).
   - name: stg_hpt__quarantine
     description: Rows the parser could not map at all (raw cells kept).
+  - name: stg_hpt__modifiers
+    description: Top-level modifier_information (JSON sources), one row per modifier x payer/plan.

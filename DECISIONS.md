@@ -139,5 +139,39 @@ Schema deviations found while confirming these files are recorded in `docs/schem
 - **The first hospital end to end is Rush** (CSV tall). It has both publisher anomalies, so every CP-DEC 006 rule is
   exercised on real data; UChicago has neither.
 
+## CP-DEC 008 — M2: streaming JSON, the item grain, Airflow 3, and gated publish to Postgres (2026-09-29)
+**Status:** Decided.
+
+- **Both parsers stream.** Rows go to Parquet in 100k-row batches, and JSON is parsed in one `ijson` pass that holds
+  one `standard_charge_information` item at a time. NM (5 GB, 7.03M payer rows) stages in about 2m45s in bounded
+  memory. *Rejected:* `json.load` (the whole 5 GB in RAM) and DuckDB `read_json` (it can't log per-field drift or
+  quarantine malformed items with their raw content).
+- **Codes attach to items, not charge rows.** A JSON item's codes apply to every payer row under it (about 60 at NM),
+  so keying codes by charge row would multiply NM's 372,886 codes to about 20M. `dim_charge_codes.item_id` joins to
+  `fct_standard_charges.item_id`. In CSV tall, each row is its own item.
+- **Conditional download with the content hash as identity.** Where the server sends an ETag (NM, UChicago), `curl
+  --etag-compare` turns an unchanged 5 GB file into a `304` and one request. Rush sends no ETag, so it downloads
+  (69 MB) and the hash decides. Manifests store paths relative to `data/`, so host and container runs share one landing
+  zone. *Rejected:* `Last-Modified` alone (it can't be compared exactly) and always re-downloading (5 GB/day for no
+  change).
+- **Staging is written aside and swapped in.** A parse that dies halfway never leaves a partial hospital for dbt to
+  read.
+- **Airflow 3.3.2, LocalExecutor, one Postgres server.** Postgres 16 hosts two databases: the served `clear_pricer`
+  and Airflow's metadata. The pipeline runs in its own virtualenv inside the Airflow image, built from
+  `requirements.lock`, so dbt and DuckDB pins never fight Airflow's constraints. The repo is bind-mounted, so code
+  changes don't need a rebuild. Host ports are 5433/8081 because 5432/8080 are used by other local stacks. Local dev
+  auth: every user is admin, and credentials are local-only defaults overridable via `.env`. *Rejected:* Airflow 2.x
+  (3.x is current), and installing dbt into Airflow's own environment (dependency conflicts).
+- **DAG shape:** `stage_{rush,uchicago,nm}` (parallel) → `dbt_build_gates` → `publish_postgres`. The gates are the
+  dbt tests, and a failure makes the run red. Publish is downstream of the gates, so **Postgres only ever holds a gated
+  build**. Stage tasks retry twice (network only), and the gate and publish tasks never retry, so a failure can't be
+  retried until it disappears.
+- **Publish = copy, swap, prove parity.** DuckDB's Postgres extension copies the marts into `published_new`, and a
+  single transaction swaps it for `published`, so readers never see a half-copy. Parity then runs the same aggregates
+  natively in both engines: counts and distinct keys must match exactly, and money sums must match to 1e-9 relative.
+  Summing 7M floats in a different order changes the 11th significant digit. Any mismatch fails the task.
+  *Rejected:* dbt-postgres running the same models (the staging models read Parquet, which Postgres can't) and
+  `pg_dump` from DuckDB (not available).
+
 ---
-*Next entry = CP-DEC 008.*
+*Next entry = CP-DEC 009.*
