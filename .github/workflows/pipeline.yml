@@ -1,0 +1,95 @@
+# The hosted daily run (CP-DEC 009): the same CLI steps as the Airflow DAG, on a GitHub runner, so nothing depends on
+# a machine being up. Order: stage x3 + NPPES sync + FHIR -> dbt build (every gate) -> publish to Supabase -> export
+# Parquet -> GitHub Release (only when the output fingerprint changed). A failing gate fails the job before anything
+# is published or released.
+name: pipeline
+
+on:
+  schedule:
+    - cron: "17 11 * * *"  # daily, 11:17 UTC
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Cut a GitHub Release if the fingerprint changed"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write  # create releases
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+env:
+  CLEAR_PRICER_DATA_DIR: /mnt/cp-data  # the runner's larger volume: ~12 GB of working data doesn't fit on /
+  SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e .
+      - name: Prepare data volume
+        run: |
+          sudo mkdir -p "$CLEAR_PRICER_DATA_DIR" && sudo chown "$USER" "$CLEAR_PRICER_DATA_DIR"
+          df -h / /mnt
+
+      # NPPES history is CDC state: carried between runs in the Actions cache. If it was evicted, nppes-sync rebuilds
+      # from the files CMS currently lists -- visible in rpt_nppes_file_log, never silent.
+      - name: Restore NPPES state
+        uses: actions/cache/restore@v4
+        with:
+          path: /mnt/cp-data/warehouse/nppes_state.duckdb
+          key: nppes-state-${{ github.run_id }}
+          restore-keys: nppes-state-
+      - name: Restore Synthea jar
+        uses: actions/cache@v4
+        with:
+          path: /mnt/cp-data/raw/synthea/bin
+          key: synthea-jar-v4.0.0
+
+      - name: Stage Rush
+        run: clear-pricer stage rush
+      - name: Stage UChicago
+        run: clear-pricer stage uchicago
+      - name: Stage Northwestern (5 GB)
+        run: |
+          clear-pricer stage nm
+          rm -rf "$CLEAR_PRICER_DATA_DIR"/raw/hpt/nm/*/  # staged; free the 5 GB
+      - name: NPPES sync (CDC)
+        run: clear-pricer nppes-sync
+      - name: Save NPPES state
+        uses: actions/cache/save@v4
+        with:
+          path: /mnt/cp-data/warehouse/nppes_state.duckdb
+          key: nppes-state-${{ github.run_id }}
+      - name: Synthetic FHIR (generate + stage)
+        run: |
+          clear-pricer synthea-generate
+          clear-pricer fhir-stage
+
+      - name: Build + gates
+        run: clear-pricer build
+
+      - name: Publish to Supabase (served tier)
+        if: env.SUPABASE_DB_URL != ''
+        run: clear-pricer publish --target supabase
+      - name: Export Parquet
+        run: clear-pricer export
+      - name: Release (if the fingerprint changed)
+        if: github.event_name == 'schedule' || inputs.release
+        run: clear-pricer release
+      - name: Summary
+        if: always()
+        run: |
+          clear-pricer report || true
+          cat docs/results/npi-reconciliation.md >> "$GITHUB_STEP_SUMMARY" || true

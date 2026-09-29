@@ -1,0 +1,28 @@
+# Clean-clone check: a fresh runner, no credentials, no cloud -- install and run every test, including the end-to-end
+# ones that prove the gates fail on bad input (broken price files, a non-synthetic FHIR patient, a dangling reference)
+# and that re-staging is byte-identical. Gate 1 as a badge, not a claim.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Test (unit + end-to-end gates)
+        run: pytest -q

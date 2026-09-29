@@ -4,10 +4,12 @@
     clear-pricer run rush --source-file F.csv  # same, from a local file (offline / fixtures / broken inputs)
     clear-pricer stage rush                    # discover -> fetch (curl) -> land -> parse -> stage   (Airflow task)
     clear-pricer build                         # dbt build over everything staged; tests gate the run (Airflow task)
-    clear-pricer publish                       # copy the marts to Postgres + parity check           (Airflow task)
+    clear-pricer publish [--target supabase]   # copy the marts to Postgres + parity check           (Airflow task)
     clear-pricer nppes-sync [--reapply]        # NPPES: latest full + weeklies -> CDC history          (Airflow task)
     clear-pricer report                        # regenerate docs/results/npi-reconciliation.md from the warehouse
     clear-pricer synthea-generate [-p 200]     # synthetic FHIR R4 population via Synthea in Docker (no PHI)
+    clear-pricer export                        # published Parquet + manifest -> data/published/ (deterministic)
+    clear-pricer release [--force]             # GitHub Release of data/published/ if the fingerprint changed
     clear-pricer fhir-stage                    # parse + validate the Synthea bundles -> staging     (Airflow task)
 
 Exit code is non-zero if any step, dbt test, or parity check fails.
@@ -93,11 +95,12 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_publish(args: argparse.Namespace) -> int:
     from clear_pricer.publish import publish
 
-    dsn = args.dsn or os.environ.get("CLEAR_PRICER_PG_DSN")
+    env_var = {"local": "CLEAR_PRICER_PG_DSN", "supabase": "SUPABASE_DB_URL"}[args.target]
+    dsn = os.environ.get(env_var)
     if not dsn:
-        print("set CLEAR_PRICER_PG_DSN or pass --dsn", file=sys.stderr)
+        print(f"set {env_var} (environment or .env) for target {args.target!r}", file=sys.stderr)
         return 2
-    return _gate(publish(warehouse_path(Path(args.data_dir).resolve()), dsn), "parity")
+    return _gate(publish(warehouse_path(Path(args.data_dir).resolve()), dsn, args.target), "parity")
 
 
 def cmd_nppes_sync(args: argparse.Namespace) -> int:
@@ -135,7 +138,28 @@ def cmd_fhir_stage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    from clear_pricer.export import export
+
+    data_dir = Path(args.data_dir).resolve()
+    m = export(warehouse_path(data_dir), data_dir / "published")
+    print(f"[export] fingerprint {m['fingerprint'][:16]}")
+    return 0
+
+
+def cmd_release(args: argparse.Namespace) -> int:
+    from datetime import date
+
+    from clear_pricer.export import release
+
+    release(Path(args.data_dir).resolve() / "published", date.today().isoformat(), force=args.force)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    from clear_pricer.secrets import load_env
+
+    load_env(REPO)  # .env (gitignored) -> environment; real env vars win. DSNs are never passed on the command line.
     p = argparse.ArgumentParser(prog="clear-pricer")
     p.add_argument("--data-dir", default=os.environ.get("CLEAR_PRICER_DATA_DIR", str(REPO / "data")))
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -147,7 +171,9 @@ def main(argv: list[str] | None = None) -> int:
         s.set_defaults(func=func)
     sub.add_parser("build", help="dbt build over the current staging").set_defaults(func=cmd_build)
     pub = sub.add_parser("publish", help="copy marts to Postgres, then check parity")
-    pub.add_argument("--dsn", help="libpq DSN (default: $CLEAR_PRICER_PG_DSN)")
+    pub.add_argument("--target", choices=("local", "supabase"), default="local",
+                     help="local = Docker Postgres ($CLEAR_PRICER_PG_DSN); supabase = hosted read tier "
+                          "($SUPABASE_DB_URL). DSNs come from the environment/.env, never the command line.")
     pub.set_defaults(func=cmd_publish)
     ns = sub.add_parser("nppes-sync", help="apply the latest NPPES full file + weekly deltas (CDC)")
     ns.add_argument("--reapply", action="store_true", help="re-apply already-applied files (idempotency proof)")
@@ -157,6 +183,10 @@ def main(argv: list[str] | None = None) -> int:
     sg.add_argument("-p", "--population", type=int, default=200)
     sg.set_defaults(func=cmd_synthea_generate)
     sub.add_parser("fhir-stage", help="parse + validate Synthea bundles into staging").set_defaults(func=cmd_fhir_stage)
+    sub.add_parser("export", help="published Parquet + manifest -> data/published/").set_defaults(func=cmd_export)
+    rl = sub.add_parser("release", help="GitHub Release of data/published/ when its fingerprint changed")
+    rl.add_argument("--force", action="store_true")
+    rl.set_defaults(func=cmd_release)
     args = p.parse_args(argv)
     return args.func(args)
 

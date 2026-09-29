@@ -27,8 +27,9 @@ per as (
 both_ as (
     select * from per
     union all
-    select 'ALL', sum(disclosed_npis), sum(unresolved_npis), sum(verified_npis), sum(undisclosed_candidates),
-           sum(undisclosed_tier1), sum(undisclosed_tier2) from per
+    -- sums are HUGEINT in DuckDB, which Parquet can't hold (it would be written as DOUBLE): cast back to BIGINT
+    select 'ALL', sum(disclosed_npis)::bigint, sum(unresolved_npis)::bigint, sum(verified_npis)::bigint,
+           sum(undisclosed_candidates)::bigint, sum(undisclosed_tier1)::bigint, sum(undisclosed_tier2)::bigint from per
 )
 select *,
     round(unresolved_npis / nullif(disclosed_npis, 0), 4) as unresolved_rate,
