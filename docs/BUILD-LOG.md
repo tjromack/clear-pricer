@@ -158,4 +158,6 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 ### Open / next
 - **Milestone 2 (awaiting approval):** a streaming JSON parser (UChicago, then NM's 5 GB), the Airflow DAG with the
   same gates, and Postgres (Docker) parity. Docker is a manual step for Trevor.
-- Clean-clone verification of this milestone: run after the commit (below).
+- **Clean-clone check passed (after commit `86fe81d`):** `git clone` → fresh venv → `pip install -e ".[dev]"` →
+  `clear-pricer run rush` fetched live, staged 208,409 rows and passed 31/31 gates; `pytest` 57/57. No credentials used.
+  Automating this as a GitHub Action is M8.
