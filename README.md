@@ -42,6 +42,10 @@ schema-drift handling and referential-integrity reconciliation over real public 
 - Not a complete or authoritative price index — a documented, reproducible slice with its reconciliation failures stated.
 - No PHI, no real fee schedules beyond what hospitals publicly publish, no payer policy library.
 
+## Read the analysis
+
+**[Same code, different price: three Chicago hospitals](docs/analysis/price-variation.md).** List prices for the same outpatient service differ a median 2.1× across Northwestern, Rush and UChicago. For insured patients, *who pays* moves the price more than *where they go*: at UChicago the same service varies a median 4.1× across its payers, against a 1.55× typical gap between Rush and UChicago. Every number is regenerated from a public data release by one command.
+
 ## Query it without cloning
 
 Every data release is Parquet on the [Releases page](https://github.com/tjromack/clear-pricer/releases), readable by DuckDB straight over HTTPS; the reports and a per-code price summary are also served read-only over REST. See **[docs/QUERY.md](docs/QUERY.md)**.

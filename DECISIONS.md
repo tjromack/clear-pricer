@@ -342,5 +342,30 @@ check covered 3 patients, then 2 sample files, and missed a thread-scheduling ra
 - *Rejected:* excluding the FHIR tables from the fingerprint (hides the problem rather than fixing it); running
   Synthea multi-threaded and staging a canonicalised sort (the difference is in content, not order).
 
+## CP-DEC 015 — What counts as "the same price" for the M7 comparison (2026-09-29)
+**Status:** Decided (Milestone 7). Refines CP-DEC 006 for *comparisons*: the dollar is still the price, but only some
+dollars are the same unit across hospitals.
+
+- **Found before writing:** `rate_basis = 'dollar'` mixes unlike things. Rush's 81,388 `other`-methodology dollars
+  sit at a median 1.00 × list price, and 39,116 of them are seven Medicare Advantage plans listed *at* the
+  chargemaster. Northwestern's dollars are mostly case rates and per diems (packages), and its 323 fee-schedule
+  dollars include $0.01 for a $1,361 venipuncture. A first cut that trusted `rate_basis` alone made Rush look like
+  the most expensive hospital on 398 of 534 codes. That's an artifact.
+- **The comparable set:** CPT Category I by *derived* family; outpatient including `both`; line items only
+  (Northwestern's 2,124 `CASE-` package items are excluded); "unlisted" codes excluded; per hospital × code, the median
+  across rows.
+- **Three price concepts, never mixed:** list (gross) and cash for all three hospitals. Contracted = fee-schedule
+  dollars only (`rate_basis = 'dollar' AND methodology = 'fee schedule'`), **Rush vs UChicago only**, because
+  Northwestern's fee-schedule dollars can't be validated from inside its file. A negotiated rate equal to the list
+  price is never counted as contracted.
+- **Contracted per hospital × code** = the median across payers of each payer's median. It doesn't let one payer with
+  many rows dominate.
+- **Every number is computed, none typed.** `clear-pricer analysis --release <tag>` regenerates the document, figures
+  and JSON from a public release, and the committed page is generated from `data-2026-09-29-27a34004`. A local run and
+  a release run produced identical results. Tests enforce the exclusions and byte-reproducibility.
+- *Rejected:* weighting by volume (no claims data; stated as a caveat); a composite "hospital price index" (it would
+  hide the payer-spread finding that is the story); including Northwestern's contracted dollars with a warning
+  (numbers known to be broken would still get quoted).
+
 ---
-*Next entry = CP-DEC 015.*
+*Next entry = CP-DEC 016.*

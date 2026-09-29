@@ -10,6 +10,7 @@
     clear-pricer synthea-generate [-p 200]     # synthetic FHIR R4 population via Synthea in Docker (no PHI)
     clear-pricer export                        # published Parquet + manifest -> data/published/ (deterministic)
     clear-pricer release [--force]             # GitHub Release of data/published/ if the fingerprint changed
+    clear-pricer analysis [--release TAG]      # docs/analysis/price-variation.md from a local export or a release
     clear-pricer fhir-stage                    # parse + validate the Synthea bundles -> staging     (Airflow task)
 
 Exit code is non-zero if any step, dbt test, or parity check fails.
@@ -156,6 +157,16 @@ def cmd_release(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_analysis(args: argparse.Namespace) -> int:
+    from clear_pricer.analysis import run
+
+    source = args.release or str(Path(args.data_dir).resolve() / "published")
+    r = run(source)
+    print(f"[analysis] list-price ratio median {r['gross']['median']:.2f}x over {r['gross']['codes_all3']:,} codes; "
+          "wrote docs/analysis/price-variation.md")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     from clear_pricer.secrets import load_env
 
@@ -187,6 +198,9 @@ def main(argv: list[str] | None = None) -> int:
     rl = sub.add_parser("release", help="GitHub Release of data/published/ when its fingerprint changed")
     rl.add_argument("--force", action="store_true")
     rl.set_defaults(func=cmd_release)
+    an = sub.add_parser("analysis", help="the M7 price-variation analysis (docs/analysis/)")
+    an.add_argument("--release", help="a data release tag to read over HTTPS (default: local data/published)")
+    an.set_defaults(func=cmd_analysis)
     args = p.parse_args(argv)
     return args.func(args)
 

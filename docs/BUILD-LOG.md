@@ -17,9 +17,10 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 4 · NPI reconciliation | `736969e` | unresolved 0.0%; disclosure coverage 13.3% (52 candidates, 46–65 sensitivity) | views baked in absolute paths; the warehouse broke across host/container |
 | 5 · synthetic FHIR | `f5d2c42` | 240,237 resources; 1,200,521/1,200,521 refs resolve; no-PHI gate | 43,606 "dangling" refs were `#contained` references |
 | 6 · publish + serve | `ad54b89` | release fingerprint identical on GitHub runner and workstation; public | a DSN password leaked into a session (rotated; redaction added); Synthea not deterministic multi-threaded |
+| 7 · the analysis | (M7 commit) | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
 
-Where things are: decisions → `DECISIONS.md` (CP-DEC 001–014) · upstream deviations → `docs/schema-drift-log.md` ·
-reproducible figures → `docs/results/` (`clear-pricer report`) · how to query → `docs/QUERY.md`.
+Where things are: decisions → `DECISIONS.md` (CP-DEC 001–015) · upstream deviations → `docs/schema-drift-log.md` ·
+reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · how to query → `docs/QUERY.md`.
 
 ---
 
@@ -542,3 +543,79 @@ reproducible figures → `docs/results/` (`clear-pricer report`) · how to query
 - FastAPI isn't deployed to a host yet (needs a hosting decision). Supabase's REST API is the hosted read path
   meanwhile.
 - Free-tier pause risk: confirm the daily run keeps the Supabase project active.
+
+---
+
+## 2026-09-29 — Notes pass + Milestone 7 (the analysis)
+
+### What happened
+- **Notes pass (asked for by Trevor).** Added an index to this log (one row per milestone: commit, headline number,
+  the break worth telling). Refreshed stale README numbers (56 → 80 gates; v1 marked shipped). Saved a project
+  memory for the open Supabase free-tier pause check.
+- **Measured comparability before writing anything.** List and cash prices exist for 2,961 codes at all three
+  hospitals, and "contracted dollars" for 649.
+- **The first cut was wrong, and checking it produced the analysis's best material.** It said Rush was the most
+  expensive hospital on 398 of 534 codes, with contracted ratios up to 2,428×. That didn't pass a smell test, so
+  I checked what each hospital's `rate_basis = 'dollar'` rows actually are:
+  - **Rush:** 81,388 `other`-methodology dollars sit at a median 1.00 × list price. 39,116 of them are seven
+    Medicare Advantage plans published *at the chargemaster price*.
+  - **Northwestern:** its dollars are mostly case rates and per diems (packages, not unit prices). Its 323
+    fee-schedule dollars include **$0.01 for a venipuncture listed at $1,361**.
+  - **Northwestern also prices 2,124 whole surgical cases as items** carrying a single CPT code. 88300 (a level-I
+    pathology exam) showed $67,556 there against $121 at Rush.
+
+  Each became an exclusion rule with a stated reason (CP-DEC 015), and each is also a drift-log entry.
+- **Setting vocabularies differ** (Rush and UChicago use `both`), which made the first list-price comparison return
+  zero rows. "Outpatient" now includes `both`.
+- **Robustness check on the headline:** excluding the case-package items moved the median list-price ratio only
+  from 2.21× to 2.11×, and p90 from 5.59× to 4.98×. The residual extremes were "unlisted" catch-all codes, now
+  excluded.
+- **The findings** (`docs/analysis/price-variation.md`):
+  - **List price**, same code, three hospitals: median **2.11×** (p90 4.93×) over 2,323 codes. 55% differ by 2× or
+    more. No hospital is uniformly expensive (UChicago highest on 1,275; Rush lowest on 1,153).
+  - **Cash:** median **3.38×**, but much of that is policy. Northwestern's cash price is 70% of list, Rush's 50%, and
+    **UChicago's is 100% of list on every row** (no cash discount).
+  - **Contracted (Rush vs UChicago, fee schedule):** typical gap **1.55×**, with Rush lower on most codes (median
+    0.78×). **Within UChicago, the same service varies a median 4.06× across its 6 payers**, so who pays moves
+    the price more than where you go. MRI lumbar spine at UChicago runs from $294 (Oscar) to $2,029 (BCBS).
+- **Three figures**, light and dark, following the dataviz method:
+  - the categorical palette was validated all-pairs in both modes by the script (the light-mode aqua contrast
+    warning is covered by legends and a table view beside every chart);
+  - every figure was rendered and inspected.
+
+  Inspection caught a clipped legend and dots hiding each other (near-equal prices on a log axis), both fixed.
+- **Reproducibility:** the committed page is generated from the public release `data-2026-09-29-27a34004`, and a
+  local-export run produced identical results (fingerprint and every number). Tests enforce the method's exclusions
+  and byte-identical output.
+
+### Decisions (→ CP-DEC 015)
+- The comparable-price definition: CPT Category I, outpatient including `both`, line items only, no unlisted
+  codes. List and cash for all three; contracted = fee-schedule dollars, Rush vs UChicago only; a negotiated rate
+  equal to list is never contracted. Rejected: volume weighting (no claims data), a composite price index (it would
+  bury the payer-spread finding), and showing Northwestern's contracted dollars with a warning.
+
+### Learnings
+- **A plausible-looking wrong answer is the most dangerous output of a price analysis.** "Rush is the most
+  expensive" came straight out of the data. Only asking *what kind of dollar is this?* exposed MA rates published at
+  list price. The `rate_basis` label from M1 was necessary but not sufficient, and methodology matters as much.
+- **"Negotiated rate" in these files is a column, not a concept.** Across three files it holds contracted fees,
+  packages, percentages of list, list itself, and figures that are probably unit-conversion artifacts.
+- **Hospital policy explains cross-hospital cash variation** better than price does: a 100%-of-list cash price is a
+  choice, not a cost.
+
+### What broke (+ fix)
+- **The trusting first cut**, as above. It became exclusion rules plus an explicit "what kind of dollar is it"
+  table at the top of the analysis.
+- **The setting mismatch** (`both`) returned an empty comparison until it was normalised.
+- **Two counts disagreed by one** (39,355 vs 39,354): two different definitions of "equals list", now one.
+- **The narrative crashed on data without the MRI example**, which the synthetic test fixture exposed. The sentence
+  is now conditional.
+- **Chart review:** the legend clipped "UChicago" and overlapping dots hid a hospital, fixed by short legend labels
+  and a small vertical dodge.
+- **Shell escaping again:** a heredoc-embedded Python patch silently failed its own assertion, so patches now run
+  from files.
+
+### Open / next
+- **Milestone 8 (awaiting approval):** `docs/CASE-STUDY.md` (the schema-drift log as its spine) and the final README
+  "How it's verified" with real numbers. The clean-clone CI badge already landed in M6.
+- Candidate v2 metric: a per-hospital "comparable-price share" (the section 1 table), tracked over releases.

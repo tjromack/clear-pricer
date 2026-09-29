@@ -78,9 +78,13 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] CI clean-clone check (`ci.yml`) green on a fresh runner; badges in README
 - [x] Repo public
 - [x] **Gate:** a stranger queries the release with no clone and no credentials. **stop**
-## Milestone 7 — the analysis (v2 shareable proof)
-- [ ] Price variation for the same CPT code across the Chicago metro — one written analysis, published
-- [ ] **Gate:** a reproducible, shareable analysis with its method + caveats stated. **stop**
+## Milestone 7 — the analysis (v2 shareable proof) ✅ (2026-09-29)
+- [x] Price variation for the same CPT code across the three Chicago hospitals — `docs/analysis/price-variation.md`
+  (list 2.11× median across 2,323 codes; cash 3.38×; contracted Rush vs UChicago 1.55× vs within-UChicago payer spread 4.06×)
+- [x] Comparable-price method decided before writing, after finding `rate_basis` mixes unlike dollars (CP-DEC 015)
+- [x] Every number computed from a pinned public release (`clear-pricer analysis --release …`); three figures (light +
+  dark, palette validated); results JSON; tests enforce the method and byte-reproducibility
+- [x] **Gate:** a reproducible, shareable analysis with its method + caveats stated. **stop**
 
 ## Milestone 8 — case study + README results
 - [ ] `docs/CASE-STUDY.md` (schema-drift log is the spine) + README "How it's verified" with the real numbers
