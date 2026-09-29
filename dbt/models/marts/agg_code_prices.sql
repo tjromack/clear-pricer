@@ -19,7 +19,7 @@ select
     max(f.negotiated_rate) as rate_max,
     median(f.gross_charge) as gross_median,
     median(f.discounted_cash) as cash_median,
-    any_value(f.description) as example_description
+    min(f.description) as example_description  -- min, not any_value: any_value varies with thread scheduling
 from {{ ref('fct_standard_charges') }} f
 join codes c using (item_id)
 group by all

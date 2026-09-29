@@ -1,8 +1,9 @@
 """Generate the synthetic FHIR R4 population with Synthea (pinned release, pinned seeds, pinned reference date).
 
-Runs the Synthea jar in a Java container (eclipse-temurin:21-jre), so no local Java is needed. Output content is
-deterministic for a given jar + arguments (verified: two runs byte-identical); only the hospital/practitioner
-directory *file names* embed a wall-clock timestamp, which is why staging orders bundles by content hash.
+Runs the Synthea jar in a Java container (eclipse-temurin:21-jre), so no local Java is needed. With the container pinned
+to one CPU, output content is byte-deterministic for a given jar + arguments on any machine (multi-threaded runs are
+not -- see the comment in `generate`); only the hospital/practitioner directory *file names* embed a wall-clock
+timestamp, which is why staging orders bundles by content hash.
 Everything generated is synthetic: no PHI, by construction.
 """
 
@@ -41,7 +42,10 @@ def generate(root: Path, population: int = 200, log=lambda m: print(m, flush=Tru
     # On Linux/macOS run as the calling user: the container otherwise writes root-owned output that the pipeline
     # (e.g. the GitHub runner user) cannot then write its manifest into. Docker Desktop on Windows maps ownership itself.
     user = ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"] if hasattr(os, "getuid") else []
-    cmd = ["docker", "run", "--rm", *user, "-v", f"{root.resolve().as_posix()}:/work", "-w", "/work", IMAGE,
+    # --cpus=1: Synthea generates people on a thread pool sized to the CPUs, and with more than one thread its output is
+    # NOT byte-deterministic (two identical 16-core runs differed in one patient; 16-core vs 4-core runs in 11). With one
+    # CPU, runs are byte-identical -- on any machine. ~80 s instead of ~22 s for 200 patients.
+    cmd = ["docker", "run", "--rm", "--cpus=1", *user, "-v", f"{root.resolve().as_posix()}:/work", "-w", "/work", IMAGE,
            "java", "-jar", f"bin/{jar.name}", *args]
     log(f"[synthea] {SYNTHEA_VERSION} population={population} seed={SEED} reference={REFERENCE_DATE}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)

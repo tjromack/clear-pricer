@@ -4,7 +4,7 @@ d as (select h.*, npi from h, unnest(h.disclosed_npis) as t(npi)),
 p as (select * from {{ ref('dim_providers_current') }}),
 hist as (select npi, status, valid_from, valid_to from {{ ref('stg_nppes__provider_history') }}),
 status_asof as (  -- status on the date the hospital published its file (SCD2 as-of join; NULL = history starts later)
-    select d.hospital_id, d.npi, any_value(x.status) as status_as_of_file_date
+    select d.hospital_id, d.npi, min(x.status) as status_as_of_file_date  -- intervals do not overlap: one match at most
     from d join hist x on x.npi = d.npi
      and try_cast(d.last_updated_on as date) >= x.valid_from
      and (x.valid_to is null or try_cast(d.last_updated_on as date) < x.valid_to)

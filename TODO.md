@@ -66,19 +66,26 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] `stage_fhir` in the DAG; FHIR reports published to Postgres with parity; clean-clone path still green
 - [x] **Gate:** resources parsed + validated with a mapping report. **stop**
 
-## Milestone 6 — publish + serve
-- [ ] Published Parquet release (GitHub Release, not committed); DuckDB-local query docs
-- [ ] Hosted schedule (CP-DEC 009): GitHub Actions cron running stage → build (gates) → publish, with state persisted
-  between runs; a failing gate fails the workflow and publishes nothing
-- [ ] FastAPI read layer → Supabase (v2). **Gate:** a stranger clones + queries with no cloud creds. **stop**
-
+## Milestone 6 — publish + serve ✅ (2026-09-29)
+- [x] Published Parquet release (GitHub Release, not committed): 13 files, byte-deterministic, manifest pins inputs +
+  output hashes; a release is cut only when the fingerprint changes — CP-DEC 013
+- [x] Query docs for strangers (`docs/QUERY.md`): DuckDB over HTTPS, hosted REST, clone-and-run
+- [x] Supabase (free tier) served set: 11 tables incl. the 49,404-row per-code price summary; RLS + read-only policy
+  + grants re-applied inside every swap; anon writes refused (tested over the live REST API)
+- [x] FastAPI read layer over the release Parquet (no DB, no credentials)
+- [x] Credential hygiene in code: DSN passwords redacted from every driver error (after a real leak — see BUILD-LOG)
+- [x] Hosted schedule (CP-DEC 009): `pipeline.yml` runs stage → build (gates) → publish → export → release daily
+- [x] CI clean-clone check (`ci.yml`) green on a fresh runner; badges in README
+- [x] Repo public
+- [x] **Gate:** a stranger queries the release with no clone and no credentials. **stop**
 ## Milestone 7 — the analysis (v2 shareable proof)
 - [ ] Price variation for the same CPT code across the Chicago metro — one written analysis, published
 - [ ] **Gate:** a reproducible, shareable analysis with its method + caveats stated. **stop**
 
 ## Milestone 8 — case study + README results
 - [ ] `docs/CASE-STUDY.md` (schema-drift log is the spine) + README "How it's verified" with the real numbers
-- [ ] Clean-clone check (GitHub Action) so Gate 1 is a badge, not a claim. **stop**
+- [x] Clean-clone check (GitHub Action) so Gate 1 is a badge, not a claim — landed early, in M6 (`ci.yml`)
+- [ ] **stop**
 
 ## Later / maybe
 - [ ] more metros; a hosted read API; a second CPT-comparison analysis

@@ -2,7 +2,7 @@
 -- many structural issues were found. The one-glance view of the FHIR path.
 with r as (select resource_type, count(*) as resources from {{ ref('stg_fhir__resources') }} group by 1),
 m as (
-    select resource_type, any_value(modelled_type) as modelled,
+    select resource_type, bool_or(modelled_type) as modelled,  -- constant per type; bool_or is explicit
            count(*) as leaf_paths, count(*) filter (where mapped) as mapped_paths,
            sum(occurrences) as leaf_values, sum(occurrences) filter (where mapped) as mapped_values
     from {{ ref('stg_fhir__mapping') }} group by 1
