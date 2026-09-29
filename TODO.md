@@ -15,16 +15,17 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] `TODO.md` — this spine
 - [x] `.gitignore` — **`data/` ignored in full** + DB/dbt/airflow artefacts + secrets
 - [x] `LICENSE` (MIT) · `data/README.md` (data is gitignored; how to fetch)
-- [ ] `git init` + first commit + GitHub remote (`tjromack/clear-pricer`, private) + push
+- [x] `git init` + first commit + GitHub remote (`tjromack/clear-pricer`, private) + push
 
-## Milestone 0 — confirm the three hospital files (don't pick blind)
-- [ ] Locate each hospital's CMS machine-readable file URL (standard-charges page; EIN-based filename)
-- [ ] Fetch each via `curl` (proxy-safe); confirm it downloads and is parseable (JSON/CSV, size, top-level shape)
-- [ ] Any that's missing/broken → swap for another Chicago system; record the final three in `DECISIONS.md`
-- [ ] **Gate:** three confirmed, reachable, parseable source URLs. **← stop for approval**
+## Milestone 0 — confirm the three hospital files (don't pick blind) ✅ (2026-09-28)
+- [x] Locate each hospital's CMS machine-readable file URL — found via each site's `cms-hpt.txt` (CP-DEC 005)
+- [x] Fetch each via `curl` (proxy-safe); confirm it downloads and is parseable — all three parsed end to end (NM 5 GB stream-parsed)
+- [x] Any that's missing/broken → swap — none needed; final three locked in CP-DEC 005
+- [x] **Gate:** three confirmed, reachable, parseable source URLs. **← stop for approval**
+- [x] First six real `docs/schema-drift-log.md` entries (BOM, scheme-less URL, header-less vendor endpoint, CPT/HCPCS typing, count-0 medians, dual rate encoding)
 
 ## Milestone 1 — one hospital, end to end
-- [ ] Landing → staging model for ONE hospital file; the parser's **unmappable-field log**
+- [ ] Landing → staging model for ONE hospital file (start with UChicago or Rush, not the 5 GB NM — CP-DEC 005); the parser's **unmappable-field log**
 - [ ] dbt models + tests (row-count, uniqueness, not-null) — tests **fail the DAG**
 - [ ] DuckDB-local mode: clone → one command → query the staged table (no cloud creds)
 - [ ] first `docs/schema-drift-log.md` entry. **Gate:** one file clean end-to-end with a failing-capable gate. **stop**
