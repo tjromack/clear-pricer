@@ -1,9 +1,10 @@
 """clear-pricer: hospital price transparency pipeline (v1: three Chicago hospitals).
 
-    stage_<hospital> (x3, parallel)  ->  dbt_build_gates  ->  publish_postgres
+    stage_<hospital> (x3) + nppes_sync  (parallel)  ->  dbt_build_gates  ->  publish_postgres
 
 - stage_*: discover via cms-hpt.txt -> curl -> content-addressed landing -> parse -> staging Parquet.
   An unchanged upstream file is a no-op at landing and yields byte-identical staging (design pin 2).
+- nppes_sync: NPPES latest full + weekly deltas -> CDC type-2 history (a no-op when nothing new was published).
 - dbt_build_gates: builds the DuckDB warehouse and runs every dbt test. Any failing test fails this task and
   therefore the run (design pin 4); publish never runs on a red build, so Postgres keeps the last gated build.
 - publish_postgres: copies the marts to the served Postgres and checks parity against DuckDB (design pin 5).
@@ -45,8 +46,15 @@ with DAG(
         )
         for h in HOSPITALS
     ]
+    nppes_sync = BashOperator(
+        task_id="nppes_sync",
+        bash_command=f"{CLI} nppes-sync",
+        retries=2,
+        retry_delay=timedelta(minutes=5),
+        execution_timeout=timedelta(hours=2),
+    )
     gates = BashOperator(task_id="dbt_build_gates", bash_command=f"{CLI} build",
                          execution_timeout=timedelta(hours=1))
     publish = BashOperator(task_id="publish_postgres", bash_command=f"{CLI} publish",
                            execution_timeout=timedelta(hours=1))
-    stages >> gates >> publish
+    [*stages, nppes_sync] >> gates >> publish

@@ -173,5 +173,54 @@ Schema deviations found while confirming these files are recorded in `docs/schem
   *Rejected:* dbt-postgres running the same models (the staging models read Parquet, which Postgres can't) and
   `pg_dump` from DuckDB (not available).
 
+## CP-DEC 009 — Hosted schedule: GitHub Actions cron, not an always-on Docker host (2026-09-29)
+**Status:** Decided (built in Milestone 6). Raised by Trevor: the pipeline must not depend on Docker running on his
+machine.
+
+- **The hosted daily run is a scheduled GitHub Actions workflow** running the same CLI steps as the Airflow DAG:
+  `stage` × 3 → `build` (dbt gates) → `publish`. A failing gate fails the workflow and nothing is published. Outputs go
+  to the M6 targets: Parquet to a GitHub Release and the served tables to Supabase (v2). State that must survive
+  between runs (landing manifests + ETags, and the NPPES history from M3) persists outside the runner.
+- **Airflow stays as the local orchestration** (`docker compose up`), demoable on demand. Both schedulers are thin
+  wrappers over one CLI, so there's a single pipeline and no drift between them.
+- **Cost:** $0. A daily run is about 10 minutes, far inside the free Actions minutes even for a private repo.
+- *Rejected:* managed Airflow (MWAA / Cloud Composer: several hundred $/month for one daily DAG); an always-on VM
+  running compose (about $5/month, but a server to patch and watch for one job); keeping Docker up locally (Trevor
+  doesn't want a machine dependency).
+
+## CP-DEC 010 — NPPES: stream-and-project, SCD2 CDC keyed on the record's own dates, state kept apart (2026-09-29)
+**Status:** Decided (Milestone 3).
+
+- **Stream and project, don't extract.** The monthly V2 file is 1.16 GB zipped / 11.7 GB of CSV, 330 columns. pyarrow
+  streams `npidata_pfile_*.csv` straight out of the zip, keeps the 51 columns this project uses (21 attributes + 15
+  taxonomy slots × code/switch), and DuckDB types and hashes them. 9.8M providers take about 1 minute; nothing
+  11.7 GB touches disk. The other ~280 columns are deliberately not modelled, but **the header is checked in full**:
+  a missing projected column rejects the file (gated), and a changed column count is logged.
+  *Rejected:* unzip then `read_csv` (11.7 GB of scratch disk every month for columns we drop), and modelling all 330
+  columns (scope with no consumer).
+- **CDC = SCD type 2 in `provider_history`.** A new version is written only when a provider's attributes (row hash)
+  or status change. The previous version is closed with `valid_to`, and the history is never truncated (design pin 2).
+  The monthly full file is *diffed* against current state, not reloaded; NPIs missing from a full file are
+  tombstoned `absent_from_full`, not deleted.
+- **Ordering comes from the record's own dates, not from arrival.** Effective date = the latest of Last Update /
+  Deactivation / Reactivation date. An incoming record older than the current version is `stale` and skipped, so a
+  late or re-run older file can't roll state back. Two file-level guards come on top: a weekly file entirely covered
+  by the last applied full file is `superseded_by_full`, and file coverage comes from the CSV's own name
+  (`npidata_pfile_20050523-20260913.csv`), not the zip name.
+- **Deactivation stubs carry the last known identity forward.** NPPES publishes a deactivation as an NPI and a date
+  with every other field blank. The new version keeps the prior attributes, takes the deactivation from the stub, and
+  is `status = deactivated`. *Why:* a price file can cite an NPI that has since been deactivated; M4 needs to know who
+  it *was*. *Rejected:* taking the stub as published (it would blank the provider's history).
+- **Hash definition:** the attributes that define a provider, excluding Last Update and Certification dates, so a
+  re-certification with no change isn't a new version. The hash is recomputed from the *resolved* attributes, so a
+  re-applied file reproduces it exactly (an earlier draft hashed a hash for stubs and would have logged spurious
+  updates on every re-run).
+- **State lives apart from the warehouse.** `nppes_state.duckdb` holds the history; the dbt warehouse is disposable
+  and rebuilt each run. dbt attaches the state DB read-only and gates its invariants: one current version per NPI;
+  versions 1..n with no gaps; valid intervals; no rejected-schema files; NPIs are 10 digits.
+- **The served store gets the file log, not the registry.** `rpt_nppes_file_log` is published with parity. The
+  9.8M-row registry is not re-served, because CMS already publishes it; the served store holds what this project
+  adds (the change ledger now, reconciliation results in M4).
+
 ---
-*Next entry = CP-DEC 009.*
+*Next entry = CP-DEC 011.*

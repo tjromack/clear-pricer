@@ -52,6 +52,8 @@ pip install -e ".[dev]"
 clear-pricer run rush      # discover (cms-hpt.txt) -> fetch (curl) -> parse -> stage -> dbt build + gates
 clear-pricer run uchicago  # 42 MB JSON
 clear-pricer run nm        # Northwestern: a 5 GB JSON download, ~3 min to stream-parse (skip it to stay light)
+clear-pricer nppes-sync    # NPPES registry: 1.2 GB monthly + weekly deltas -> CDC history (~6 min first time)
+clear-pricer build         # re-run the dbt gates over everything loaded
 ```
 
 The run exits non-zero if any quality gate fails. Then query the local DuckDB warehouse:
@@ -68,6 +70,9 @@ print(c.sql('select rate_basis, count(*) from fct_standard_charges group by 1'))
 | `rpt_source_conformance` | what each source file got wrong against the CMS v3 dictionary, and how often |
 | `dim_modifiers` | payer-specific modifier rules published at file level (JSON sources) |
 | `stg_hpt__files` | one row per source file: SHA-256, template version, Type-2 NPIs, row counts |
+| `dim_providers_current` | the NPPES registry as of the latest applied file, one row per NPI (deactivations included) |
+| `stg_nppes__provider_history` | NPPES SCD2 history: every version of every provider, with `valid_from`/`valid_to` |
+| `rpt_nppes_file_log` | every NPPES file applied, and what it changed (inserted / updated / deactivated / stale) |
 
 Offline, or to watch a gate fail: `clear-pricer run rush --source-file tests/fixtures/broken_ragged_rows.csv`.
 
@@ -77,7 +82,8 @@ Offline, or to watch a gate fail: `clear-pricer run rush --source-file tests/fix
 docker compose up -d       # Postgres 16 (localhost:5433) + Airflow 3 (http://localhost:8081, local dev: no login)
 ```
 
-The `clear_pricer_hpt` DAG runs daily: `stage_{rush,uchicago,nm}` → `dbt_build_gates` → `publish_postgres`.
+The `clear_pricer_hpt` DAG runs daily: `stage_{rush,uchicago,nm}` + `nppes_sync` → `dbt_build_gates` →
+`publish_postgres`.
 A failing gate turns the run red and **publish never runs**, so the served `published` schema always holds the last
 gated build, and a parity check proves it matches DuckDB. To watch the gate fire, trigger the DAG with
 `{"source_overrides": {"rush": "tests/fixtures/broken_ragged_rows.csv"}}`. The DuckDB path above needs none of this.

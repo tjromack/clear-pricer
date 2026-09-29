@@ -247,3 +247,74 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 - **Milestone 3 (awaiting approval):** NPPES full replace + weekly delta with change-data capture. The NPPES monthly
   file is multi-GB (size to be measured in M3), and the same streaming/ETag patterns apply.
 - For M7: a sub-flag for "dollar equals a zero-count median", and stating NM's thin clean coverage.
+
+---
+
+## 2026-09-29 — Hosting decision + Milestone 3 (NPPES incremental load + CDC)
+
+### What happened
+- **Hosting (raised by Trevor): the pipeline shouldn't need Docker up on his machine.** Decided on a scheduled GitHub
+  Actions workflow running the same CLI steps as the DAG (CP-DEC 009, built in M6). Airflow stays as the local, on
+  demand orchestration. Cost is $0 against several hundred $/month for managed Airflow. `docker compose stop` is safe
+  meanwhile (`catchup=False`, so no backfill storm on restart).
+- **Surveyed NPPES before designing.** V2 is now the only format (V1 dropped 03/03/2026). The monthly full is
+  1,105.79 MB zipped, holding `npidata_pfile_20050523-20260913.csv` at 11.7 GB and 330 columns. Weekly deltas are
+  5.9–6.6 MB. The listing showed an ordering hazard straight away: one weekly (09/07–09/13) sits *inside* the monthly
+  file's coverage, so applying it after the full file would roll records back.
+- **Checked where the price files carry NPIs.** The CMS v3 schema has exactly one NPI field, the header-level
+  `type_2_npi`. So the three v1 hospitals carry **8 NPIs in total** (NM 2, Rush 1, UChicago 5), with none on charge
+  rows. Flagged to Trevor as an M4 design question.
+- **Built stream-and-project CDC** (CP-DEC 010). pyarrow streams the CSV out of the zip and keeps 51 of 330 columns;
+  DuckDB types, derives the primary taxonomy and hashes. **9,798,758 providers in 57 s**, with no 11.7 GB extraction
+  to disk. The merge writes SCD2 versions to a state DB that lives apart from the rebuildable warehouse.
+- **Real sync:** the September full file was the initial load (9,798,758 inserts); the 09/07–09/13 weekly was
+  `superseded_by_full`; then the two later weeklies:
+
+  | Weekly | New | Updated | Deactivated | Reactivated | Unchanged |
+  |---|---|---|---|---|---|
+  | 09/14–09/20 | 13,665 | 14,073 | 584 | 35 | 5,935 |
+  | 09/21–09/27 | 13,547 | 13,868 | 682 | 45 | 5,867 |
+
+  History: 9,855,257 versions across 9,825,970 NPIs. First sync about 5m45s; a no-op sync is one listing request.
+- **Idempotency proven on the real data.** I fingerprinted the whole history (count + current count + a hash sum over
+  key/version/hash/status/interval columns), re-applied every file with `--reapply`, and fingerprinted again:
+  identical. The full file then reports 9,769,907 unchanged + 28,851 stale (records the weeklies had moved past),
+  0 changes.
+- dbt gates over the 9.8M-row history (one current version per NPI; versions 1..n with no gaps; valid intervals;
+  no rejected-schema files; 10-digit NPIs): 46/46 green in 38 s. `rpt_nppes_file_log` publishes to Postgres with parity.
+
+### Decisions (→ CP-DEC 009, 010)
+- CP-DEC 009: hosted schedule = GitHub Actions cron over the same CLI; Airflow = local orchestration.
+- CP-DEC 010: stream-and-project; SCD2 keyed on the record's own dates with a file-coverage tie-break; deactivation
+  stubs carry identity forward; `absent_from_full` tombstones, never deletes; state apart from the warehouse; the
+  served store gets the file log, not the registry (CMS already serves that).
+
+### Learnings
+- **"Full file through 09/13" is not a hard boundary.** It contains 46 records dated 09/14, and for one NPI it
+  disagrees with the 09/14 weekly under the same date. A file's stated coverage is a claim to be checked.
+- **Deactivation stubs would erase history** if taken as published: NPI and date, everything else blank. Carrying
+  the last known identity forward is what lets M4 say who a deactivated NPI was.
+- **About 17% of weekly records are no-ops**: update dates move (re-certification) while the attributes don't. Leaving
+  the dates out of the version hash keeps history about real change.
+- **Streaming the zip beats extracting it by a wide margin:** under a minute for 11.7 GB of CSV, with no scratch disk.
+
+### What broke (+ fix)
+- **Idempotency bug #1, found by reading, before any run.** The first draft hashed a deactivation stub from the
+  *current version's hash*, so re-applying would hash a hash and log a spurious update every time. Every row's hash
+  now comes from its resolved attributes.
+- **Idempotency bug #2, found by reading, before the re-apply proof.** Re-applying an *older* full file after the
+  weeklies would have tombstoned the roughly 27k NPIs the weeklies created, since they're "missing" from a full file
+  that predates them. `absent_from_full` now only applies to NPIs whose current version predates the file's
+  coverage end. Regression test added.
+- **Idempotency bug #3, found by the proof itself.** The re-apply added 2 versions. Traced to NPI `1801771704`: same
+  Last Update Date (09/14) in the full file and the 09/14 weekly, with different content, so re-application
+  flip-flopped it. Fixed with a total order (record date, then file coverage end). The history was rebuilt from
+  source, the proof re-run clean, and a regression test pins the case.
+- **`enable_progress_bar` can't be set as a DuckDB connect option** ("could not set option as a global option"),
+  which killed the first sync after the download. Now set per session. The progress bar had also been polluting logs.
+
+### Open / next
+- **Milestone 4 (awaiting approval) needs a design call on what "unresolved NPI" means at v1 scale.** Price files
+  carry only header-level Type-2 NPIs: 8 in v1. Options go to Trevor with the M3 report.
+- The NPPES monthly deactivation report (2.6 MB) is a candidate cross-check gate (every NPI it lists should be
+  `deactivated` in current state).

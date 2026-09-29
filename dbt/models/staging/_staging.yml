@@ -22,3 +22,9 @@ models:
     description: Rows the parser could not map at all (raw cells kept).
   - name: stg_hpt__modifiers
     description: Top-level modifier_information (JSON sources), one row per modifier x payer/plan.
+  - name: stg_nppes__provider_history
+    description: SCD2 NPPES history (one row per NPI x version); maintained by CDC, read-only to dbt.
+  - name: stg_nppes__file_log
+    description: One row per NPPES file application attempt, with change counts.
+  - name: stg_nppes__drift
+    description: NPPES header / parse drift per file.

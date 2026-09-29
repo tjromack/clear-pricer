@@ -14,7 +14,8 @@ from pathlib import Path
 
 import duckdb
 
-TABLES = ("fct_standard_charges", "dim_charge_codes", "dim_modifiers", "rpt_source_conformance", "stg_hpt__files")
+TABLES = ("fct_standard_charges", "dim_charge_codes", "dim_modifiers", "rpt_source_conformance", "stg_hpt__files",
+          "rpt_nppes_file_log")  # the 9.8M-row NPPES registry itself is not re-served: CMS publishes it (CP-DEC 010)
 
 # (table, aggregate SQL valid in both DuckDB and Postgres)
 PARITY = {
@@ -24,6 +25,7 @@ PARITY = {
     "dim_modifiers": "count(*)",
     "rpt_source_conformance": "count(*), sum(n)",
     "stg_hpt__files": "count(*), sum(records_read), sum(charge_rows)",
+    "rpt_nppes_file_log": "count(*), sum(rows), sum(inserted), sum(updated), sum(deactivated), sum(unchanged)",
 }
 
 

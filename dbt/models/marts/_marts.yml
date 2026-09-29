@@ -52,3 +52,13 @@ models:
           - accepted_values:
               arguments:
                 values: [CPT_CAT_I, CPT_CAT_II, CPT_CAT_III, CPT_PLA, CPT_MAAA, HCPCS_II, CDT, UNCLASSIFIED]
+
+  - name: dim_providers_current
+    columns:
+      - name: npi
+        tests: [unique, not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: [active, deactivated, absent_from_full]

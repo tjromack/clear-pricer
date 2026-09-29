@@ -38,9 +38,14 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] Quality gates fail the DAG (not warn); run `broken_input_proof_1` went red at `dbt_build_gates` and publish was `upstream_failed`
 - [x] Postgres (Docker) served parity with DuckDB-local: a gated publish plus a parity check that fails the task on mismatch. **Gate:** a red DAG on bad input. **stop**
 
-## Milestone 3 — NPPES incremental load + CDC
-- [ ] NPPES full replace + weekly delta ingestion; change-data-capture (not truncate-and-reload)
-- [ ] **Gate:** a re-run is idempotent; a delta updates without a full reload. **stop**
+## Milestone 3 — NPPES incremental load + CDC ✅ (2026-09-29)
+- [x] NPPES full + weekly delta ingestion; change-data-capture into an SCD2 history (not truncate-and-reload) — CP-DEC 010
+- [x] Stream-and-project from the zip (11.7 GB CSV → 9.8M providers in ~1 min); full header drift check
+- [x] Record-date ordering + file-coverage tie-break; deactivation stubs carry identity forward; absent-from-full tombstones
+- [x] dbt CDC gates (one current version, contiguous versions, valid intervals, no rejected files, NPI format)
+- [x] `nppes_sync` task in the Airflow DAG; NPPES file log published to Postgres with parity
+- [x] **Gate:** re-applying every file leaves the 9,855,257-row history identical (fingerprinted); weekly deltas
+  touch only their ~34k records. **stop**
 
 ## Milestone 4 — NPI reconciliation (the story)
 - [ ] Resolve every price-file NPI against NPPES; **publish the unresolved rate as a number** + explain it
@@ -52,6 +57,8 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 
 ## Milestone 6 — publish + serve
 - [ ] Published Parquet release (GitHub Release, not committed); DuckDB-local query docs
+- [ ] Hosted schedule (CP-DEC 009): GitHub Actions cron running stage → build (gates) → publish, with state persisted
+  between runs; a failing gate fails the workflow and publishes nothing
 - [ ] FastAPI read layer → Supabase (v2). **Gate:** a stranger clones + queries with no cloud creds. **stop**
 
 ## Milestone 7 — the analysis (v2 shareable proof)

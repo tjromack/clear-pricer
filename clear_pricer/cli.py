@@ -5,6 +5,7 @@
     clear-pricer stage rush                    # discover -> fetch (curl) -> land -> parse -> stage   (Airflow task)
     clear-pricer build                         # dbt build over everything staged; tests gate the run (Airflow task)
     clear-pricer publish                       # copy the marts to Postgres + parity check           (Airflow task)
+    clear-pricer nppes-sync [--reapply]        # NPPES: latest full + weeklies -> CDC history          (Airflow task)
 
 Exit code is non-zero if any step, dbt test, or parity check fails.
 """
@@ -24,11 +25,20 @@ def warehouse_path(data_dir: Path) -> Path:
     return data_dir / "warehouse" / "clear_pricer.duckdb"
 
 
+def nppes_state_path(data_dir: Path) -> Path:
+    """NPPES history is *state* (CDC), so it lives apart from the rebuildable warehouse."""
+    return data_dir / "warehouse" / "nppes_state.duckdb"
+
+
 def dbt_build(data_dir: Path) -> bool:
     from dbt.cli.main import dbtRunner
 
+    from clear_pricer.nppes import init_state
+
     warehouse_path(data_dir).parent.mkdir(parents=True, exist_ok=True)
+    init_state(nppes_state_path(data_dir))  # an empty history is valid (HPT-only runs, clean clones)
     os.environ["CLEAR_PRICER_DUCKDB"] = warehouse_path(data_dir).as_posix()
+    os.environ["CLEAR_PRICER_NPPES_DB"] = nppes_state_path(data_dir).as_posix()
     os.environ.setdefault("DO_NOT_TRACK", "1")
     project = REPO / "dbt"
     res = dbtRunner().invoke([
@@ -83,6 +93,14 @@ def cmd_publish(args: argparse.Namespace) -> int:
     return _gate(publish(warehouse_path(Path(args.data_dir).resolve()), dsn), "parity")
 
 
+def cmd_nppes_sync(args: argparse.Namespace) -> int:
+    from clear_pricer.nppes import sync
+
+    data_dir = Path(args.data_dir).resolve()
+    results = sync(data_dir, nppes_state_path(data_dir), reapply=args.reapply)
+    return 1 if any(r["outcome"] == "rejected_schema" for r in results) else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="clear-pricer")
     p.add_argument("--data-dir", default=os.environ.get("CLEAR_PRICER_DATA_DIR", str(REPO / "data")))
@@ -97,6 +115,9 @@ def main(argv: list[str] | None = None) -> int:
     pub = sub.add_parser("publish", help="copy marts to Postgres, then check parity")
     pub.add_argument("--dsn", help="libpq DSN (default: $CLEAR_PRICER_PG_DSN)")
     pub.set_defaults(func=cmd_publish)
+    ns = sub.add_parser("nppes-sync", help="apply the latest NPPES full file + weekly deltas (CDC)")
+    ns.add_argument("--reapply", action="store_true", help="re-apply already-applied files (idempotency proof)")
+    ns.set_defaults(func=cmd_nppes_sync)
     args = p.parse_args(argv)
     return args.func(args)
 

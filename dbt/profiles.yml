@@ -5,3 +5,7 @@ clear_pricer:
       type: duckdb
       path: "{{ env_var('CLEAR_PRICER_DUCKDB', '../data/warehouse/clear_pricer.duckdb') }}"
       threads: 4
+      attach:
+        - path: "{{ env_var('CLEAR_PRICER_NPPES_DB', '../data/warehouse/nppes_state.duckdb') }}"
+          alias: nppes
+          read_only: true
