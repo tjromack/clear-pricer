@@ -453,3 +453,77 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
   query docs, and the hosted GitHub Actions schedule (CP-DEC 009). Supabase and FastAPI will need Trevor: a Supabase
   project and credentials, and a decision on anything that costs money.
 - Candidate extension: map EOB adjudication (payment detail).
+
+---
+
+## 2026-09-29 — Milestone 6 (publish + serve; repo public)
+
+### What happened
+- **Serving shape decided with Trevor (CP-DEC 013):** stay on the Supabase free tier. The full detail ships as a
+  Parquet GitHub Release (queryable by DuckDB over HTTPS); Supabase serves the small set (reports + a 49,404-row
+  per-code price summary); a FastAPI layer reads the release Parquet. Trevor set up the Supabase project. I reviewed
+  his settings (auto-expose off, automatic RLS on, US East region, session-pooler connection) and wrote the
+  step-by-step for the credential.
+- **Release export:** 13 Parquet files, 116 MB, byte-deterministic (`ORDER BY ALL`, single thread). A manifest pins
+  inputs and output hashes, and the fingerprint over both decides whether a release is cut.
+- **Supabase publish:** 11 served tables in 5 s, parity passing. Lockdown verified in the catalog: RLS on, one
+  read policy, `anon` can `SELECT` but not `INSERT`/`UPDATE`/`DELETE`. Verified over the live REST API too: reads
+  return 200, and a `DELETE` with the public key returns **401 permission denied**. The API also survives a
+  republish (schema drop and swap) with no dashboard step.
+- **Read API** (FastAPI over Parquet): answers from the 117 MB fact with no database behind it. CPT 99213,
+  contracted dollars only: Rush median **$185** (30 payer rows, $88–$252) vs UChicago **$61.65**; Northwestern has
+  none.
+- **CI** (`ci.yml`) went green on its first run: a fresh runner and all tests, including the end-to-end gates, in
+  68 s. The M8 clean-clone badge landed early.
+- **Hosted pipeline** (`pipeline.yml`, CP-DEC 009): three dispatched runs. The second one went fully green in
+  about 25 min: all three hospitals (5 GB NM included), NPPES (history restored from the Actions cache, so every file
+  was "already applied — skip"), synthetic FHIR, **80/80 gates**, Supabase publish, export and release.
+- **Cross-machine reproducibility, proven.** The GitHub runner (Linux, 4 CPUs) and this workstation (Windows
+  Docker, 16 CPUs) independently built release fingerprint **`27a340045c24de0f…`**. Every byte of all 13 files
+  matched.
+- **Public.** A full-history secret scan came back clean (see below), then the repo went public as Trevor approved.
+  **Gate:** a fresh `python:3.12-slim` container (no clone, no login, no credentials) ran the README and QUERY.md
+  snippets verbatim, including aggregates over the full 7.37M-row fact straight from the release over HTTPS.
+
+### Decisions (→ CP-DEC 013, 014)
+- CP-DEC 013: three read paths (release Parquet / Supabase served set / FastAPI); lockdown re-applied inside every
+  schema swap; credentials only from env/.env, with passwords redacted from every driver error; a release is cut
+  exactly when the output fingerprint changes; NPPES state lives in the Actions cache with a visible rebuild fallback.
+- CP-DEC 014 (corrects CP-DEC 012): "reproducible" now means the same bytes on any machine; Synthea is pinned to one
+  CPU; no `any_value` anywhere in the marts.
+
+### Learnings
+- **"Deterministic" needs a second machine to mean anything.** Two runs on one machine hid two nondeterminisms
+  (`any_value` thread scheduling, and Synthea's multi-threaded generation). Comparing a hosted release to a local
+  one with identical inputs exposed both at once, and the diff was diagnosable row by row.
+- **Parquet has no 128-bit integer**, so DuckDB writes HUGEINT (e.g. `sum()` of counts) as DOUBLE, and counts
+  came back as `8.0`. It's now a release gate.
+- **Free-tier Postgres behind a pooler is enough for a public read tier** when the heavy detail lives in object
+  storage and gets queried where it sits.
+
+### What broke (+ fix)
+- **I leaked a database password into the session.** My first connection test let DuckDB's error message print
+  the full DSN, password included, when authentication failed. The failure itself was the password pasted *inside*
+  the `[YOUR-PASSWORD]` placeholder brackets. Fix: Trevor rotated the password (with written steps); `secrets.py`
+  now redacts DSN passwords from every driver error, and `publish` runs entirely under that guard, with a
+  regression test reproducing the exact error. The password never reached git: the history scan is clean.
+- **Publish-side lockdown needed care:** a schema swap drops grants and policies, so they're re-applied inside the
+  same transaction as the swap.
+- **Hosted run 1 failed at Synthea:** the container wrote root-owned output that the runner user couldn't write
+  into. It now runs as the calling user on Linux.
+- **The first hosted release differed from local in 3 of 13 files.** Row-level diagnosis found `any_value`
+  (`agg_code_prices.example_description`), multi-threaded Synthea (one CarePlan activity) and a machine-dependent
+  NPPES ledger (idempotency-proof re-applications). All three were fixed, and the cross-machine fingerprint now
+  matches. The superseded first release was annotated rather than deleted.
+- **The parity check's own SQL broke** twice (duplicate aggregate names, then a quoted literal inside
+  `postgres_query`), and the FastAPI test caught DECIMAL money serialising as JSON strings.
+- **The Node 20 deprecation warning in CI**: actions bumped to current majors (checkout v7, setup-python v7,
+  cache v6).
+
+### Open / next
+- **Milestone 7 (awaiting approval):** the written analysis, price variation for the same CPT code across the
+  Chicago metro. The data is shaped for it (`agg_code_prices` with `rate_basis`), and NM's thin contracted-dollar
+  coverage (4,140 rows) must be stated up front.
+- FastAPI isn't deployed to a host yet (needs a hosting decision). Supabase's REST API is the hosted read path
+  meanwhile.
+- Free-tier pause risk: confirm the daily run keeps the Supabase project active.

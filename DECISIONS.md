@@ -319,5 +319,28 @@ machine.
   the run rebuilds from the files CMS currently lists, and that shows in `rpt_nppes_file_log`. *Rejected:* a 1.5 GB
   state file as a release asset (heavy daily upload), and rebuilding every run (history resets monthly).
 
+## CP-DEC 014 — Reproducible across machines, not just across runs (2026-09-29)
+**Status:** Decided. **Corrects CP-DEC 012,** which called Synthea output "byte-deterministic (verified twice)". That
+check covered 3 patients, then 2 sample files, and missed a thread-scheduling race.
+
+- **What exposed it.** The first hosted release (GitHub runner, Linux, 4 CPUs) and the local build (Windows Docker,
+  16 CPUs) had **identical inputs**, but 3 of 13 release files differed. 10 were byte-identical, including the
+  7.37M-row fact. Each cause was diagnosed row by row before any fix:
+  1. `agg_code_prices`: `any_value(description)` picks whichever row a thread reaches first. Only
+     `example_description` differed (2,308 rows); every price statistic matched. → `min(description)`, and every
+     other `any_value` was replaced with an explicit aggregate.
+  2. `rpt_fhir_mapping`: one synthetic patient's CarePlan had one extra activity. **Synthea is not
+     byte-deterministic when multi-threaded**: two identical 16-core runs on the same machine differed in one
+     patient file, and 16-core vs single-CPU runs differed in 11. Single-CPU runs are identical. → Synthea's container
+     is pinned to `--cpus=1` (about 80 s instead of 22 s for 200 patients).
+  3. `rpt_nppes_file_log`: the local ledger included the idempotency-proof re-applications (all zero-change); the
+     hosted one didn't. → Publish one row per file (its first application); re-applications stay in staging for
+     audit.
+- **The standard is now "the same inputs give the same bytes on any machine."** The check is the release
+  fingerprint (inputs + output hashes): a hosted build and a local build of the same upstream data must produce the
+  same fingerprint.
+- *Rejected:* excluding the FHIR tables from the fingerprint (hides the problem rather than fixing it); running
+  Synthea multi-threaded and staging a canonicalised sort (the difference is in content, not order).
+
 ---
-*Next entry = CP-DEC 014.*
+*Next entry = CP-DEC 015.*
