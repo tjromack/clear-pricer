@@ -83,5 +83,61 @@ M0 SHA-256 values (2026-09-28): NM `908ac958…3712`, Rush `47f31395…3b80`, UC
 
 Schema deviations found while confirming these files are recorded in `docs/schema-drift-log.md` (the first 6 entries).
 
+## CP-DEC 006 — Three normalisation rules: rate precedence, zero-count medians, code family (2026-09-29)
+**Status:** Decided (Trevor set the direction; the specifics follow the CMS v3 data dictionary). Implemented in
+`clear_pricer/rules.py`, unit-tested, and enforced by dbt gates.
+
+1. **The dollar amount is the price whenever it's present.** When a row has both a dollar and a percentage,
+   `negotiated_rate` = the dollar. The spec backs this: *"If a payer-specific negotiated charge dollar can be
+   calculated … calculate the dollar amount and encode [it]."* `rate_basis` records where the dollar came from:
+   `dollar` · `dollar_from_percent` (the dollar is within one cent of pct × gross, i.e. just a percentage applied to the
+   chargemaster price) · `dollar_percent_unreconciled` · `percent_only` · `algorithm_only` · `missing` · `no_payer`.
+   *Why:* on Rush, 68,877 of 74,067 dual rows are exactly pct × gross (truncated or rounded). A comparison can then
+   choose to exclude chargemaster-derived dollars instead of mixing them in silently.
+   *Rejected:* percentage wins (it discards the spec's preferred encoding and yields no comparable dollar), and
+   dropping dual rows (that silently loses 36% of Rush's data).
+2. **Allowed amounts reported with `count = "0"` are nulled, not zeroed.** The spec says *"If the count of allowed
+   amounts is zero, do not encode these data elements."* A median over zero remittances is not a fact. Zero would claim
+   a $0 payment; null says "unknown". The clean columns (`median_amount`, `p10_amount`, `p90_amount`) are nulled and
+   `allowed_amounts_suppressed = 'count_zero'` is set. The raw values stay in `*_raw` columns, and each occurrence is
+   counted in the drift log. *Rejected:* setting them to zero (it creates false $0 prices); dropping the row (the
+   negotiated rate on the same row is still valid).
+3. **`code_family` comes from the code's shape, following the standard.** HCPCS Level I *is* CPT (AMA): Category I is
+   `\d{5}`, Category II `\d{4}F`, Category III `\d{4}T`, PLA `\d{4}U`. HCPCS Level II (CMS) is a letter plus 4 digits,
+   and `D\d{4}` is CDT (dental). The declared type is kept verbatim, and `type_conflict` flags codes whose shape
+   contradicts it (`cpt_declared_not_cpt`, e.g. NM's `A4216` typed `CPT`). **A CPT code typed `HCPCS` is not a
+   conflict**, because Level I is part of HCPCS. That's what Rush and UChicago do, and it's valid. Comparisons join on
+   `code_family`. *Rejected:* trusting the declared type (it would split the same procedure across hospitals), and
+   rewriting the declared type (that loses what the source actually said).
+
+## CP-DEC 007 — M1 pipeline shape and gate policy (2026-09-29)
+**Status:** Decided.
+
+- **Landing → staging → dbt.** `curl` lands each file content-addressed at `raw/hpt/<hospital>/<sha256[:16]>/`.
+  A pure Python parser writes staging Parquet (`charges`, `codes`, `drift`, `quarantine`, `file`), and dbt-duckdb
+  builds the views and marts and runs the tests in one `dbt build`.
+  *Rejected:* DuckDB's `read_csv` straight into dbt. It can't record per-column unmappable fields or quarantine
+  ragged rows with their raw cells (design pin 3), and it would put the spec rules in SQL, where they can't be unit
+  tested.
+- **Two classes of check.** *Integrity gates* **fail the run**:
+  - a required CMS column or header field is missing;
+  - the template version isn't `3.0.0`;
+  - more than 1% of records are quarantined (`max_quarantine_share`);
+  - rows are lost (read ≠ published + quarantined, or the file is empty);
+  - a key is not unique, an enum is invalid after normalisation, or a relationship is broken;
+  - a zero-count median leaks into the clean columns;
+  - `negotiated_rate` is inconsistent with `rate_basis`.
+
+  *Source-conformance findings* (a hospital's own spec deviations: unreconciled dual rates, zero-count medians,
+  unmapped extra columns) are **measured and published** in `rpt_source_conformance`. They don't fail the run.
+  *Why:* the spec allows hospital-created columns, and a gate that fails on every publisher defect would never go
+  green. The deviations *are* the dataset's story (CP-DEC 003), so they're published as numbers.
+  *Rejected:* dbt `warn` severity for either class. Nothing in the project warns (design pin 4).
+- **Idempotency is byte-level.** Staging carries no timestamps and keeps a stable row order, so the same landed file
+  yields byte-identical Parquet. This was verified by hashing the outputs of two runs. The only non-deterministic field
+  is `first_seen_at` in `landing.json`, and it's written once.
+- **The first hospital end to end is Rush** (CSV tall). It has both publisher anomalies, so every CP-DEC 006 rule is
+  exercised on real data; UChicago has neither.
+
 ---
-*Next entry = CP-DEC 006.*
+*Next entry = CP-DEC 008.*

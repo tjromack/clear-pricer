@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: stg_hpt__files
+    description: One row per staged source file (the current file for each hospital) + its header metadata.
+    columns:
+      - name: hospital_id
+        tests: [unique, not_null]
+      - name: source_sha256
+        tests: [not_null]
+      - name: template_version
+        description: Parsers are written against CMS template v3.0.0; any other version fails the run until handled.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["3.0.0"]
+
+  - name: stg_hpt__drift
+    description: The parser's unmappable-field / drift log, aggregated per (kind, column).
+  - name: stg_hpt__quarantine
+    description: Rows the parser could not map at all (raw cells kept).

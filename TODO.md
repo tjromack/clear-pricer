@@ -24,13 +24,15 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] **Gate:** three confirmed, reachable, parseable source URLs. **← stop for approval**
 - [x] First six real `docs/schema-drift-log.md` entries (BOM, scheme-less URL, header-less vendor endpoint, CPT/HCPCS typing, count-0 medians, dual rate encoding)
 
-## Milestone 1 — one hospital, end to end
-- [ ] Landing → staging model for ONE hospital file (start with UChicago or Rush, not the 5 GB NM — CP-DEC 005); the parser's **unmappable-field log**
-- [ ] dbt models + tests (row-count, uniqueness, not-null) — tests **fail the DAG**
-- [ ] DuckDB-local mode: clone → one command → query the staged table (no cloud creds)
-- [ ] first `docs/schema-drift-log.md` entry. **Gate:** one file clean end-to-end with a failing-capable gate. **stop**
+## Milestone 1 — one hospital, end to end ✅ (2026-09-29, Rush)
+- [x] Landing → staging model for ONE hospital file (Rush, CP-DEC 007); the parser's **unmappable-field log** (`rpt_source_conformance`)
+- [x] The three normalisation rules: rate precedence, zero-count medians nulled, `code_family` (CP-DEC 006)
+- [x] dbt models + tests (row-count, uniqueness, not-null, enums, relationships + 5 singular gates) — tests **fail the run**; 3 broken fixtures each trip their gate (`tests/test_e2e_gates.py`)
+- [x] DuckDB-local mode: clone → one command (`clear-pricer run rush`) → query `fct_standard_charges` (no cloud creds); staged Parquet byte-identical across re-runs
+- [x] first `docs/schema-drift-log.md` entry (M0 wrote six; M1 closed their handling + added the truncation entry). **Gate:** one file clean end-to-end with a failing-capable gate. **stop**
 
 ## Milestone 2 — the Airflow DAG with failing gates (all three hospitals)
+- [ ] JSON parser (streaming, `ijson`) for UChicago + NM; BOM handling on the JSON path
 - [ ] Airflow DAG: fetch → parse → stage → dbt test, scheduled, idempotent
 - [ ] Quality gates fail the DAG (not warn); a deliberately-broken input proves the gate fires
 - [ ] Postgres (Docker) served parity with DuckDB-local. **Gate:** a red DAG on bad input. **stop**

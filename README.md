@@ -42,9 +42,32 @@ schema-drift handling and referential-integrity reconciliation over real public 
 
 ## Quickstart
 
-> Scaffolding stage — the pipeline is being built milestone by milestone (see `TODO.md`). The design target is:
-> **clone → one command → query the published Parquet in DuckDB, with no cloud credentials.** This section will carry
-> the real command once milestone 1 lands.
+No cloud credentials. Needs Python 3.11+ and `curl` (on PATH by default on Windows 10+, macOS and Linux).
+
+```bash
+git clone https://github.com/tjromack/clear-pricer && cd clear-pricer
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+
+clear-pricer run rush      # discover (cms-hpt.txt) -> fetch (curl) -> parse -> stage -> dbt build + gates
+```
+
+The run exits non-zero if any quality gate fails. Then query the local DuckDB warehouse:
+
+```bash
+python -c "import duckdb; c = duckdb.connect('data/warehouse/clear_pricer.duckdb', read_only=True); \
+print(c.sql('select rate_basis, count(*) from fct_standard_charges group by 1'))"
+```
+
+| Table | What it is |
+|---|---|
+| `fct_standard_charges` | one row per source charge row; `negotiated_rate` + `rate_basis` (where the dollar came from) |
+| `dim_charge_codes` | every billing code, declared type kept verbatim + `code_family` derived from the code's shape |
+| `rpt_source_conformance` | what each source file got wrong against the CMS v3 dictionary, and how often |
+| `stg_hpt__files` | one row per source file: SHA-256, template version, Type-2 NPIs, row counts |
+
+Offline, or to watch a gate fail: `clear-pricer run rush --source-file tests/fixtures/broken_ragged_rows.csv`.
+v1 status: Rush is end to end (Milestone 1); UChicago and Northwestern land in Milestone 2.
 
 ## How it's verified (the differentiator)
 

@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: fct_standard_charges
+    columns:
+      - name: charge_id
+        tests: [unique, not_null]
+      - name: hospital_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_hpt__files')
+                field: hospital_id
+      - name: rate_basis
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [dollar, dollar_from_percent, dollar_percent_unreconciled, percent_only, algorithm_only, missing, no_payer]
+      - name: setting
+        tests:
+          - accepted_values:
+              arguments:
+                values: [inpatient, outpatient, both]
+      - name: methodology
+        tests:
+          - accepted_values:
+              arguments:
+                values: [case rate, fee schedule, percent of total billed charges, per diem, other]
+      - name: count_bucket
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["0", "1-10", "11+", invalid]
+
+  - name: dim_charge_codes
+    columns:
+      - name: charge_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_standard_charges')
+                field: charge_id
+      - name: code
+        tests: [not_null]
+      - name: code_family
+        tests:
+          - accepted_values:
+              arguments:
+                values: [CPT_CAT_I, CPT_CAT_II, CPT_CAT_III, CPT_PLA, HCPCS_II, CDT, UNCLASSIFIED]

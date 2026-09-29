@@ -1,0 +1,7 @@
+clear_pricer:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('CLEAR_PRICER_DUCKDB', '../data/warehouse/clear_pricer.duckdb') }}"
+      threads: 4

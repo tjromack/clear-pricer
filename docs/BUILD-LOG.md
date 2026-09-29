@@ -97,3 +97,65 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
   unmappable-field log, dbt tests that fail the run, and DuckDB-local mode.
 - Decisions due before staging: dollar-vs-percentage precedence; handling of `count = 0` medians
   (null / quarantine / annotate); the derived `code_family` rules.
+
+---
+
+## 2026-09-29 — Milestone 1 (one hospital, end to end: Rush)
+
+### What happened
+- **Settled three rules before writing staging code, checking each against the CMS spec rather than intuition.**
+  Trevor's instincts were: the dollar is the price; zero-count medians should be zero or null, whichever is best
+  practice; classify code types by a standard. I fetched the CMS v3 CSV data dictionary and the v3 tall template from
+  `CMSgov/hospital-price-transparency` (via `curl`) and checked each one:
+  - *Dollar vs percentage:* the spec says to calculate and encode the dollar when it can be calculated, so dollar wins.
+    Tested against Rush first: 93% of dual rows are exactly pct × gross. So the dollar is the price, but it gets a
+    label (`rate_basis`) saying where it came from.
+  - *Zero-count medians:* the spec says *"If the count of allowed amounts is zero, do not encode these data elements."*
+    Null, not zero. Zero would publish a $0 price that never happened.
+  - *Code types:* HCPCS Level I **is** CPT. That corrected my M0 drift entry: Rush and UChicago typing CPT codes as
+    `HCPCS` is valid, just ambiguous. Only NM's `A1234`-as-`CPT` is a real conflict.
+- **Built the pipeline:** `curl` + content-addressed landing, a pure CSV-tall parser that records rather than drops,
+  deterministic Parquet staging, then dbt-duckdb views, marts and gates in one `dbt build`, all behind one command:
+  `clear-pricer run rush`.
+- **Rush end to end:** 208,409 records read = 208,409 published + 0 quarantined; 604,719 billing codes; 31/31 dbt
+  nodes pass. Live run (discovery → curl → stage → dbt) took ~35 s. The file's SHA-256 matched M0's, so Rush hasn't
+  republished since yesterday.
+- **Proved the gates fail:** three committed broken fixtures (missing `count` column, 10% ragged rows, template
+  `2.2.0`). Each trips exactly its intended gate, and `tests/test_e2e_gates.py` asserts a red run for each.
+- **Proved idempotency:** two runs over the same file produced byte-identical staged Parquet (SHA-256 of all five files).
+
+### Decisions (→ CP-DEC 006, 007)
+- CP-DEC 006: dollar precedence plus `rate_basis`; zero-count allowed amounts nulled with raw values kept;
+  `code_family` from code shape.
+- CP-DEC 007: a Python parser writes Parquet for dbt (rejected: DuckDB `read_csv` straight into dbt, which can't log
+  per-column drift or quarantine rows with their raw cells). Two classes of check: integrity gates fail the run;
+  source-conformance findings are measured and published, not failed on. (A gate that fails on every publisher defect
+  never goes green, and the defects are the story.) Quarantine tolerance is 1%.
+
+### Learnings
+- **The spec settled most "judgment calls".** Every rule landed on a quoted sentence from the CMS dictionary.
+  That's more defensible in the case study than "it seemed reasonable".
+- **Rush's rows have no gaps, but not much signal:** every one of its 208,409 rows has a payer and a dollar, yet
+  68,877 of them are just a percentage applied to the chargemaster price, and 34.9% carry medians over zero
+  claims.
+- **dbt's version check fails through the proxy** (`dbt --version`: *"latest version could not be determined"*).
+  That's the CP-DEC 004 gotcha: dbt uses `requests`. Harmless, but anonymous usage stats (same HTTP path) are
+  switched off in `dbt_project.yml`.
+- **Windows console encoding:** printing DuckDB results with non-ASCII payer names failed under cp1252.
+  Workaround: `PYTHONIOENCODING=utf-8` for ad-hoc queries.
+
+### What broke (+ fix)
+- **Float-cent reconciliation.** The first full run reported 6,227 unreconciled dual rows, against the M0 profile's
+  5,190. Traced to Rush **truncating** derived dollars (61% × $2.14 = $1.3054 → `1.30`) while my rule **rounded**
+  (→ `1.31`), and in floating point `1.31 − 1.30 > 0.01`. The first fix (compare rounded integer cents, ±1) was wrong
+  too: a new test showed it accepted a dollar 1.46 cents off. Final rule: within less than one cent of the exact
+  product, in cents. That reconciles both truncation and rounding and rejects real mismatches. Counts now match M0
+  exactly (68,877 / 5,190), and all three cases are pinned as regression tests.
+- **`classify_code` with a missing type** returned no family; the parser test expected shape-based classification.
+  Changed so a code with no declared type is classified by shape alone (never forced into `UNCLASSIFIED`), and the
+  missing type is logged separately.
+
+### Open / next
+- **Milestone 2 (awaiting approval):** a streaming JSON parser (UChicago, then NM's 5 GB), the Airflow DAG with the
+  same gates, and Postgres (Docker) parity. Docker is a manual step for Trevor.
+- Clean-clone verification of this milestone: run after the commit (below).

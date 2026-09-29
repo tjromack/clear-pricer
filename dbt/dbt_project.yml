@@ -1,0 +1,26 @@
+name: clear_pricer
+version: "0.1.0"
+config-version: 2
+profile: clear_pricer
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+flags:
+  send_anonymous_usage_stats: false  # its HTTPS call can't pass this machine's TLS proxy (CP-DEC 004); no telemetry anyway
+
+vars:
+  data_dir: "../data"               # the CLI passes an absolute path
+  max_quarantine_share: 0.01        # gate: >1% of a file's records quarantined fails the run
+
+models:
+  clear_pricer:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+tests:
+  clear_pricer:
+    +severity: error                # gates fail the DAG; nothing here is allowed to merely warn (design pin 4)
