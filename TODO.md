@@ -47,9 +47,15 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] **Gate:** re-applying every file leaves the 9,855,257-row history identical (fingerprinted); weekly deltas
   touch only their ~34k records. **stop**
 
-## Milestone 4 — NPI reconciliation (the story)
-- [ ] Resolve every price-file NPI against NPPES; **publish the unresolved rate as a number** + explain it
-- [ ] **Gate:** the unresolved-NPI rate is a committed, reproducible figure. **stop**
+## Milestone 4 — NPI reconciliation (the story) ✅ (2026-09-29)
+- [x] Resolve every price-file NPI against NPPES (check digit, status, as-of status, type, taxonomy, name, address)
+- [x] Completeness direction: undisclosed hospital NPIs in NPPES as tiered, evidence-backed candidates (CP-DEC 011)
+- [x] **Publish the unresolved rate as a number** + explain it: 0.0% unresolved, 13.3% disclosure coverage, with
+  threshold sensitivity → `docs/results/npi-reconciliation.md` (`clear-pricer report`, byte-reproducible)
+- [x] Gates: resolution completeness, candidate-rule adherence, headline consistency, macro unit checks; published
+  to Postgres with parity
+- [x] Warehouse made self-contained (no views over absolute paths)
+- [x] **Gate:** the unresolved-NPI rate is a committed, reproducible figure. **stop**
 
 ## Milestone 5 — Synthea FHIR ingestion path
 - [ ] Parse/map/validate synthetic FHIR R4 bundles (the clinical side; FHIR on the résumé, honestly, no PHI)

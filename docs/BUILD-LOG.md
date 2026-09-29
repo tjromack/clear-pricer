@@ -318,3 +318,70 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
   carry only header-level Type-2 NPIs: 8 in v1. Options go to Trevor with the M3 report.
 - The NPPES monthly deactivation report (2.6 MB) is a candidate cross-check gate (every NPI it lists should be
   `deactivated` in current state).
+
+---
+
+## 2026-09-29 — Milestone 4 (NPI reconciliation, both directions)
+
+### What happened
+- **Reframed the milestone before building it.** The v3 schema puts NPIs only in the file header, so v1 has 8 to
+  reconcile. I put three options to Trevor: two-directional (recommended), resolution-only, or pulling NPIs from
+  sister hospitals' file headers. He approved the recommendation.
+- **Direction 1 (resolution): all 8 disclosed NPIs resolve and verify.** All are active, Type 2 and hospital taxonomy
+  (282N general acute, 282NC2000X children's, 273R psychiatric unit), with valid check digits and names matching.
+  **Unresolved-NPI rate: 0.0%.** Rush's is `resolved_verified_campus`: same name and ZIP, different street.
+- **Direction 2 (completeness):** probing NPPES around each hospital's disclosed ZIPs turned up far more active
+  hospital-taxonomy registrations under the hospitals' own names than the files disclose:
+
+  | Hospital | Disclosed | Undisclosed candidates |
+  |---|---|---|
+  | NM | 2 | 17 (9 same address + 8 same campus) |
+  | Rush | 1 | 22 (all same campus) |
+  | UChicago | 5 | 13 (same address) |
+
+  **Disclosure coverage: 13.3%**, with 52 candidates in the band 46 / 52 / 65 at name thresholds 0.95 / 0.90 / 0.85.
+  Every candidate is published with its evidence.
+- **Reviewed every candidate row by hand before trusting the number.** Tiers 1–2 are genuine same-name registrations
+  at the hospital's campus. The threshold cuts both ways ("UNIVERSITY OF CHICAGO HOSPITALS" at 0.886–0.895 falls just
+  below it), which is why the sensitivity table ships with the figure. The threshold was set before any result was
+  seen and was not tuned afterwards.
+- **Reproducible figure.** `clear-pricer report` regenerates `docs/results/npi-reconciliation.md` from the gated marts,
+  pinned to the input SHA-256s and NPPES files. Two regenerations gave identical SHA-256
+  (`735bb9d9…`), and so did a third from the warehouse the *Airflow container* rebuilt (run `m4_reconciliation_1`,
+  56/56 gates, parity PASS). The figure reproduces across environments, not just across runs.
+- 56/56 dbt nodes green, including 4 new M4 gates and a macro unit-check test (the CMS check-digit example
+  `1234567893` passes; flipping its last digit fails). Three reconciliation tables publish to Postgres with parity.
+
+### Decisions (→ CP-DEC 011)
+- Two directions; an outcome ladder for resolution; tiered completeness candidates (1 = same address + name,
+  2 = same campus + name; 3 and 4 published, not counted); Jaro-Winkler ≥ 0.90 fixed up front and published with
+  sensitivity; deterministic SQL macros; rates published, never gated (they're findings, not failures).
+
+### Learnings
+- **"Unresolved" was the wrong question at v1 scale; "undisclosed" is the story.** Every NPI the hospitals chose to
+  list is clean, and the gap is in what they didn't list. Hospitals disclose 1–5 NPIs while NPPES carries about
+  15–23 active hospital registrations under their names on the same campus.
+- **Rush's file lists the one address with no NPPES registration.** Its disclosed address (1620 W Harrison) matches
+  none of the 23 Rush hospital registrations; exact-address matching alone would have found zero candidates. That's
+  why there's a campus (ZIP) tier.
+- **The registry has its own data-quality problems:** an individual registered as a Type 2 children's hospital at
+  UChicago's address, and hospitals registered under typo'd names ("NORWESTERN", "SROGER", "CHICAGP").
+- **NPPES history makes an as-of check possible:** each disclosed NPI's status on the day the hospital published. For
+  one NM NPI it's NULL because that NPI's history starts after April. That's honest: the history only knows versions
+  from each record's last update on.
+
+### What broke (+ fix)
+- **Views over Parquet baked in the builder's absolute path.** The container-built warehouse referenced
+  `/opt/clear-pricer/data/...` and broke on the host, and a downloaded warehouse would break the same way. Staging is
+  now tables, and the three big staging models are ephemeral (inlined into mart tables). The warehouse is
+  self-contained: 12 base tables, 0 views. Rebuilt from scratch to drop the stale views, since dbt doesn't drop
+  relations for models that turn ephemeral.
+- **`asof` is a DuckDB reserved word** (ASOF joins); the CTE is renamed.
+- **Parity SQL broke on a quoted literal:** `'resolved_verified%'` inside the string passed to `postgres_query(...)`.
+  Inner quotes are now doubled.
+- **A shell heredoc choked on a quote in the SQL**; the dbt files were written directly instead.
+
+### Open / next
+- **Milestone 5 (awaiting approval):** the Synthea FHIR R4 path (synthetic only, no PHI), with a mapping report.
+- Limitation to state in the case study: NPPES secondary practice locations (`pl_pfile`) aren't modelled, so
+  completeness matches only primary practice addresses.

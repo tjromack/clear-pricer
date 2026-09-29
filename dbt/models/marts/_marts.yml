@@ -62,3 +62,31 @@ models:
           - accepted_values:
               arguments:
                 values: [active, deactivated, absent_from_full]
+
+  - name: rpt_npi_resolution
+    description: Direction 1 -- each disclosed Type 2 NPI resolved against NPPES, with the evidence and an outcome.
+    columns:
+      - name: outcome
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [invalid_npi, unresolved, resolved_inactive, resolved_not_organization,
+                         resolved_not_hospital_taxonomy, resolved_identity_mismatch, resolved_verified_campus,
+                         resolved_verified]
+
+  - name: rpt_npi_completeness
+    description: Direction 2 -- NPPES hospital NPIs under the hospital's name at its addresses/campus, disclosed or not.
+    columns:
+      - name: tier
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4]
+
+  - name: rpt_npi_reconciliation
+    description: Headline reconciliation numbers per hospital and overall.
+    columns:
+      - name: hospital_id
+        tests: [unique, not_null]

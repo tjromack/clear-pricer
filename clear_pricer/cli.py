@@ -6,6 +6,7 @@
     clear-pricer build                         # dbt build over everything staged; tests gate the run (Airflow task)
     clear-pricer publish                       # copy the marts to Postgres + parity check           (Airflow task)
     clear-pricer nppes-sync [--reapply]        # NPPES: latest full + weeklies -> CDC history          (Airflow task)
+    clear-pricer report                        # regenerate docs/results/npi-reconciliation.md from the warehouse
 
 Exit code is non-zero if any step, dbt test, or parity check fails.
 """
@@ -101,6 +102,14 @@ def cmd_nppes_sync(args: argparse.Namespace) -> int:
     return 1 if any(r["outcome"] == "rejected_schema" for r in results) else 0
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    from clear_pricer.report import write
+
+    target = write(warehouse_path(Path(args.data_dir).resolve()), REPO / "docs" / "results" / "npi-reconciliation.md")
+    print(f"[report] wrote {target.relative_to(REPO)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="clear-pricer")
     p.add_argument("--data-dir", default=os.environ.get("CLEAR_PRICER_DATA_DIR", str(REPO / "data")))
@@ -118,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     ns = sub.add_parser("nppes-sync", help="apply the latest NPPES full file + weekly deltas (CDC)")
     ns.add_argument("--reapply", action="store_true", help="re-apply already-applied files (idempotency proof)")
     ns.set_defaults(func=cmd_nppes_sync)
+    sub.add_parser("report", help="regenerate the committed reconciliation figures").set_defaults(func=cmd_report)
     args = p.parse_args(argv)
     return args.func(args)
 

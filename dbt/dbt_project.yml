@@ -17,7 +17,9 @@ vars:
 models:
   clear_pricer:
     staging:
-      +materialized: view
+      # Tables, not views: a view over read_parquet() bakes in the builder's absolute path, so a warehouse built in
+      # the container (/opt/...) broke on the host. The big staging models are ephemeral (inlined into mart tables).
+      +materialized: table
     marts:
       +materialized: table
 

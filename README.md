@@ -73,6 +73,8 @@ print(c.sql('select rate_basis, count(*) from fct_standard_charges group by 1'))
 | `dim_providers_current` | the NPPES registry as of the latest applied file, one row per NPI (deactivations included) |
 | `stg_nppes__provider_history` | NPPES SCD2 history: every version of every provider, with `valid_from`/`valid_to` |
 | `rpt_nppes_file_log` | every NPPES file applied, and what it changed (inserted / updated / deactivated / stale) |
+| `rpt_npi_reconciliation` | the headline: unresolved-NPI rate + disclosure coverage, per hospital and overall |
+| `rpt_npi_resolution` / `rpt_npi_completeness` | the evidence behind it, NPI by NPI |
 
 Offline, or to watch a gate fail: `clear-pricer run rush --source-file tests/fixtures/broken_ragged_rows.csv`.
 
@@ -90,10 +92,20 @@ gated build, and a parity check proves it matches DuckDB. To watch the gate fire
 
 ## How it's verified (the differentiator)
 
-Measured, not asserted — populated as milestones land:
-- **Quality gates that fail the DAG** (not warn) — dbt tests for row-count, freshness, uniqueness, and mapping.
-- **Referential integrity:** the price-file-NPI → NPPES unresolved rate, published as a number and explained.
-- **A schema-drift log** (`docs/schema-drift-log.md`): what changed upstream, when, and how the pipeline handled it.
+Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned inputs):
+- **Quality gates that fail the run** (not warn): 56 dbt checks, covering row reconciliation, keys, enums, CMS
+  required columns, the CDC history's invariants and the reconciliation's own rules. A deliberately broken input turns
+  the Airflow run red, and publish never runs (run `broken_input_proof_1`).
+- **NPI reconciliation, both directions** ([docs/results/npi-reconciliation.md](docs/results/npi-reconciliation.md)):
+  **unresolved-NPI rate 0.0%** (8 of 8 disclosed Type 2 NPIs resolve, all verified). **Disclosure coverage 13.3%**:
+  NPPES holds 52 more active hospital NPIs registered under the same hospital names at the same addresses or campus
+  ZIPs (46–65 across the threshold sensitivity band), published as evidence-backed candidates.
+- **Publisher conformance, measured:** e.g. 92.8% of Northwestern's payer rows report a median over zero claims;
+  55.9% of its dollar-plus-percentage rates don't reconcile. See `rpt_source_conformance`.
+- **A schema-drift log** ([docs/schema-drift-log.md](docs/schema-drift-log.md)): what deviated upstream, when, and how
+  the pipeline handled it.
+- **Idempotency, proven:** restaging a file yields byte-identical Parquet; re-applying every NPPES file leaves the
+  9.86M-row history identical.
 
 ## Stack
 

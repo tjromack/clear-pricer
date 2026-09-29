@@ -222,5 +222,40 @@ machine.
   9.8M-row registry is not re-served, because CMS already publishes it; the served store holds what this project
   adds (the change ledger now, reconciliation results in M4).
 
+## CP-DEC 011 — NPI reconciliation is two-directional; candidates, not accusations (2026-09-29)
+**Status:** Decided (Trevor approved the approach; Milestone 4).
+
+- **Context.** CMS v3 price files carry NPIs in exactly one place: the header's `type_2_npi` (the hospital's own
+  Type 2 NPIs). v1's three hospitals disclose **8**. A one-directional "unresolved rate" over 8 NPIs is a thin number.
+- **Direction 1 — resolution (price file → NPPES).** Each disclosed NPI is checked for format and **check digit**
+  (Luhn over `80840` + NPI), presence in NPPES, active status, entity type 2, **hospital taxonomy** (primary taxonomy
+  27x/28x, the CMS criterion), name similarity to the file's hospital/location names, and address/ZIP agreement. It
+  also gets its status **as of the file's `last_updated_on`** via the SCD2 history (NULL when the history starts
+  later). Outcome ladder: `invalid_npi` → `unresolved` → `resolved_inactive` → `resolved_not_organization` →
+  `resolved_not_hospital_taxonomy` → `resolved_identity_mismatch` → `resolved_verified_campus` →
+  `resolved_verified`. **Unresolved rate** = (`unresolved` + `invalid_npi`) / disclosed.
+- **Direction 2 — completeness (NPPES → price file).** CMS requires the file to list the Type 2 NPIs of the hospital
+  *and all its locations*. Candidates are active, Type 2, hospital-taxonomy NPIs in a disclosed ZIP with **name
+  similarity ≥ 0.90** (Jaro-Winkler on normalised names, org or parent org). Tier 1 = same street address (house number
+  + street + ZIP); tier 2 = same campus ZIP. Tier 3 (same address, different name) and tier 4 (near-miss, 0.80–0.90)
+  are published, **not counted**. **Disclosure coverage** = disclosed / (disclosed + undisclosed tier 1–2 candidates).
+- **Candidates, not violations.** NPIs are rarely deactivated, so an undisclosed candidate may be a stale or billing
+  registration. Every candidate is published with its evidence (name, taxonomy, address, similarity), and the report
+  carries a **threshold sensitivity** table (0.85 / 0.90 / 0.95). *Why:* a number with its evidence and its
+  sensitivity can be checked; an accusation can't.
+- **The threshold (0.90) was fixed before any result was seen,** and it's reported with its sensitivity rather than
+  tuned. It cuts both ways: "UNIVERSITY OF CHICAGO HOSPITALS" (0.886–0.895) falls below it, and "RUSH UNIVERSITY"
+  (0.900) sits on it.
+- **Matching is deterministic SQL macros** (`dbt/macros/reconcile.sql`), unit-checked on known inputs inside the gate
+  run (including the CMS standard's check-digit example `1234567893`).
+- **Reproducible figure.** `clear-pricer report` regenerates `docs/results/npi-reconciliation.md` from the gated marts,
+  pinned to the input SHA-256s and NPPES files; the same inputs give byte-identical output.
+- *Rejected:* resolution-only (a thin number); pulling more NPIs from sister hospitals' price files (edges past the
+  CP-DEC 002 hospital line); probabilistic record linkage (opaque for a published figure at this scale);
+  treating NPPES secondary practice locations as addresses (not modelled in v1; noted as a limitation).
+- **Gates:** every disclosed NPI gets exactly one resolution row; every counted candidate satisfies the stated rule;
+  the headline row adds up; the macros pass their unit checks. The rates themselves are published, never gated:
+  they're findings, not failures.
+
 ---
-*Next entry = CP-DEC 011.*
+*Next entry = CP-DEC 012.*

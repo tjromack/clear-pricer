@@ -15,7 +15,7 @@ from pathlib import Path
 import duckdb
 
 TABLES = ("fct_standard_charges", "dim_charge_codes", "dim_modifiers", "rpt_source_conformance", "stg_hpt__files",
-          "rpt_nppes_file_log")  # the 9.8M-row NPPES registry itself is not re-served: CMS publishes it (CP-DEC 010)
+          "rpt_nppes_file_log", "rpt_npi_resolution", "rpt_npi_completeness", "rpt_npi_reconciliation")  # the 9.8M-row NPPES registry itself is not re-served: CMS publishes it (CP-DEC 010)
 
 # (table, aggregate SQL valid in both DuckDB and Postgres)
 PARITY = {
@@ -26,6 +26,10 @@ PARITY = {
     "rpt_source_conformance": "count(*), sum(n)",
     "stg_hpt__files": "count(*), sum(records_read), sum(charge_rows)",
     "rpt_nppes_file_log": "count(*), sum(rows), sum(inserted), sum(updated), sum(deactivated), sum(unchanged)",
+    "rpt_npi_resolution": "count(*), count(distinct npi), count(*) filter (where outcome like 'resolved_verified%')",
+    "rpt_npi_completeness": "count(*), count(distinct npi), count(*) filter (where tier in (1, 2) and not disclosed), "
+                            "sum(name_similarity)",
+    "rpt_npi_reconciliation": "count(*), sum(disclosed_npis), sum(unresolved_npis), sum(undisclosed_candidates)",
 }
 
 
@@ -70,7 +74,8 @@ def publish(warehouse: Path, dsn: str) -> bool:
         target = "files" if t == "stg_hpt__files" else t
         select = ", ".join(f"{expr} AS m{i}" for i, expr in enumerate(e.strip() for e in _split(aggs)))
         duck = con.sql(f"SELECT {select} FROM wh.main.{t}").fetchone()
-        pg = con.sql(f"SELECT * FROM postgres_query('pg', 'SELECT {select} FROM published.{target}')").fetchone()
+        inner = f"SELECT {select} FROM published.{target}".replace("'", "''")  # embedded in a SQL string literal
+        pg = con.sql(f"SELECT * FROM postgres_query('pg', '{inner}')").fetchone()
         match = len(duck) == len(pg) and all(_close(a, b) for a, b in zip(duck, pg))
         ok &= match
         print(f"[parity] {target}: {'OK' if match else 'MISMATCH'}  duckdb={duck}  postgres={pg}", flush=True)
