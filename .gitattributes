@@ -1,0 +1,6 @@
+# LF everywhere: generated reports must hash identically on every OS, and container files need LF.
+* text=auto eol=lf
+*.png binary
+*.zip binary
+*.parquet binary
+*.duckdb binary
