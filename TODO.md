@@ -99,4 +99,7 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [ ] FHIR ExplanationOfBenefit adjudication (payment detail; 5.3% mapped today)
 - [ ] NPPES secondary practice locations (widens NPI completeness matching)
 - [ ] per-hospital "comparable-price share" tracked across releases
-- [ ] confirm the Supabase free-tier project stays active under the daily run
+- [ ] confirm the Supabase free-tier project stays active under the daily run (still active after night 1)
+- [x] schedule resilience after night 1's dropped run: second daily slot + freshness watchdog (CP-DEC 017)
+- [ ] observe a week of unattended runs; confirm the watchdog stays green on healthy days
+- [ ] alerting beyond GitHub's failed-run email (e.g. a webhook), if one inbox proves too easy to miss

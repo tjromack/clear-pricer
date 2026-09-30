@@ -379,5 +379,51 @@ dollars are the same unit across hospitals.
 - *Rejected:* relabelling v1 as "v2 done" (the metro-level claims need the hospitals), and deferring the features to
   keep the original labels (they were built and verified; hiding that would misstate the system).
 
+## CP-DEC 017 — A schedule is a request, not a guarantee: two slots plus a freshness watchdog (2026-09-30)
+**Status:** Decided. Found on the first night the project ran unattended.
+
+- **What happened.** The pipeline's first scheduled run (cron `17 11 * * *`, 2026-09-30 11:17 UTC) never fired.
+  Nothing was misconfigured: the workflow was `active`, the cron was on the default branch, and the repo was public.
+  GitHub documents scheduled events as best-effort; under load a run can be delayed, or dropped outright. Nothing
+  alerted anyone. It was found about five hours later by asking "did it run?". No data was lost: every upstream file
+  was unchanged, so the run would have published nothing new.
+- **Decision: redundant triggers plus an independent check.**
+  1. **Two daily pipeline slots** (11:17 and 23:47 UTC). A dropped slot is covered by the other. Duplicates are
+     harmless: runs queue under one concurrency group, and an unchanged day cuts no release (CP-DEC 013 fingerprint).
+  2. **A freshness watchdog** (`freshness.yml`, its own schedule at 17:37 UTC). If the last *successful* pipeline run
+     is older than 26 h, it re-enables the pipeline workflow (a no-op if enabled; covers GitHub disabling schedules in
+     public repos after 60 days without repository activity), dispatches a catch-up run, and **fails on purpose** so
+     GitHub notifies the owner. A healthy day is a green no-op.
+- **Proven, not assumed.** The watchdog was run with a 1-hour threshold. It judged the pipeline stale (18 h), dispatched
+  the catch-up run, and failed as designed (freshness run on 2026-09-30).
+- **What the pattern is:** monitor the *outcome* (a recent successful run), not the *trigger* (a cron). The same
+  applies to any scheduled job: a job that silently doesn't start is invisible to its own error handling.
+- *Rejected:* paid or external schedulers (cost, and still a single trigger); making the pipeline itself self-check
+  (it can't notice a run that never started); relying on the cron alone and checking by hand (that's how this was
+  found).
+- **Residual risk, stated:** all three schedules are GitHub's, so a platform-wide scheduling outage defeats all of
+  them. If the watchdog's own schedule is dropped, detection waits for the next day.
+
+## CP-DEC 018 — Reproducible on any day, not just any machine: pin Synthea's end date (2026-09-30)
+**Status:** Decided. **Extends CP-DEC 014.**
+
+- **What happened.** The first catch-up run on day 2 (dispatched by the watchdog test) cut a new release,
+  `data-2026-09-30-a7af41f9`, although every upstream input was unchanged. The manifests showed identical inputs and 10
+  of 13 files byte-identical. Only the three FHIR reports differed. The synthetic population itself had grown by one
+  day of simulated history: +6 Observations, +6 Procedures, +1 Claim/ExplanationOfBenefit, and one Condition fewer.
+- **Cause.** Synthea's simulation *end date* defaults to the day it runs. CP-DEC 014 pinned the seeds, the reference
+  date (`-r`) and the thread count, but not `-e`. The day-1 cross-machine proof passed because both builds ran on the
+  same day.
+- **Decision.** Pin the end date to the reference date (`-e 20260901`), so the population depends on nothing that
+  changes over time. The fingerprint (CP-DEC 013) worked exactly as designed: it detected the change and published
+  it. The fix makes such a change *real* rather than spurious.
+- **How it will be proven.** A post-fix release is cut once, since the population changes a final time. The next
+  day's unattended run must then reproduce that fingerprint and cut **no** release. That one observation tests
+  day-independence and the schedule together.
+- **The broader lesson:** hunt for the clock. Any default of "now" (end dates, `now()`, "latest" lookups) makes
+  output depend on the day, and a same-day comparison can't see it.
+- *Rejected:* excluding the FHIR tables from the fingerprint (hides the problem); regenerating Synthea only on
+  demand (the hosted run has no persistent population, so it must regenerate deterministically).
+
 ---
-*Next entry = CP-DEC 017.*
+*Next entry = CP-DEC 019.*
