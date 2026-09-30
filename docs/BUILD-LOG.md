@@ -19,6 +19,7 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 6 · publish + serve | `ad54b89` | release fingerprint identical on GitHub runner and workstation; public | a DSN password leaked into a session (rotated; redaction added); Synthea not deterministic multi-threaded |
 | 7 · the analysis | `b9d46f3` | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
 | 8 · case study | `100fd91` | `docs/CASE-STUDY.md`, with the drift log (21 entries) as its spine; every number checked against its source | two case-study claims were stronger than their evidence; tightened before shipping |
+| night 1 · unattended | `343a2a0` | watchdog proven both ways; release rebuilt with pinned Synthea end date (`78bc6a4f`) | the first scheduled run never fired, and a catch-up run cut a spurious release (Synthea's end date = today) |
 
 Where things are: decisions → `DECISIONS.md` (CP-DEC 001–018) · upstream deviations → `docs/schema-drift-log.md` ·
 reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · the case study → `docs/CASE-STUDY.md` · how to query → `docs/QUERY.md`.
@@ -662,3 +663,70 @@ reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis
 ### Open / next (post-v1)
 - The Supabase free-tier pause check (memory saved; revisit after about a week of daily runs).
 - v2 scale-out (CP-DEC 016); the "Later" list in TODO.md.
+
+---
+
+## 2026-09-30 — Night 1 unattended: a dropped schedule, a watchdog, and "deterministic on one day"
+
+### What happened
+- **Trevor asked the right question after ~14 hours away: "has anything run by itself?"** Nothing had. The
+  pipeline's first scheduled run (cron `17 11 * * *`, 11:17 UTC) never fired. Checked at 16:02 UTC:
+  - the workflow was `active`, the cron was on `main`, and the repo was public;
+  - the only pipeline runs were day 1's three manual dispatches;
+  - local Airflow was off because Docker Desktop had been stopped, which was expected;
+  - the served endpoints were healthy (Supabase REST 200, release download 200);
+  - CI was green on every push.
+- **No data was lost.** Upstream was unchanged: Northwestern had the same ETag, Rush the same SHA-256 (`47f31395…`),
+  and NPPES the same file list. A run would have published nothing new.
+- **Cause: GitHub scheduled runs are best-effort.** GitHub documents that scheduled events can be delayed under load,
+  and some dropped. Nothing was misconfigured, and nothing noticed.
+- **Mitigation (CP-DEC 017), built and proven the same day:**
+  - a second daily pipeline slot, 23:47 UTC;
+  - a separate freshness watchdog (`freshness.yml`, 17:37 UTC). If the last *successful* pipeline run is more than
+    26 hours old, it re-enables the workflow, dispatches a catch-up run and fails on purpose so GitHub alerts the
+    owner.
+  - Proven both ways:
+    - Forced stale (threshold 1 h): "pipeline stale (18 h since last success)", then it dispatched a catch-up
+      pipeline and failed as designed.
+    - Healthy (threshold 26 h): "0 h ago … fresh -- nothing to do", green.
+- **The catch-up run exposed a second problem.** It succeeded (80/80 gates, parity PASS, NPPES a no-op from the
+  cached CDC state) but cut a new release, `data-2026-09-30-a7af41f9`, with **identical inputs**. The manifest diff
+  showed 10 of 13 files byte-identical; only the three FHIR reports differed. The synthetic population had grown by
+  one day of simulated history: +6 Observations, +6 Procedures, +1 Claim/EOB, −1 Condition.
+- **Cause: Synthea's simulation end date defaults to today.** Seeds, reference date and thread count were pinned
+  (CP-DEC 014), but `-e` wasn't. Day 1's cross-machine proof passed because both builds ran on the same day. The fix
+  pins `-e` to the reference date (CP-DEC 018). The verification run succeeded (80/80, parity PASS) and cut the one
+  expected post-fix release, `data-2026-09-30-78bc6a4f`.
+
+### Decisions (→ CP-DEC 017, 018)
+- CP-DEC 017: monitor the outcome (a recent successful run), not the trigger (a cron). Two slots, plus a watchdog
+  that heals and alerts. Residual risk stated: all schedules are GitHub's.
+- CP-DEC 018: reproducible on any day, not just any machine; the Synthea end date is pinned.
+
+### Learnings
+- **A job that doesn't start can't report its own failure.** Every gate in this project fires *inside* a run. None
+  can notice a run that never happened, so liveness needs its own, independent check.
+- **Hunt for the clock.** A default of "now" (here Synthea's end date) makes output depend on the day, and a same-day
+  comparison, even across two machines, can't see it. The release fingerprint caught it the first time days differed,
+  so the design worked; the input it guarded wasn't fully pinned.
+- **The release fingerprint doubles as a determinism alarm.** A new release with unchanged inputs is itself a signal.
+- **Observed, not assumed.** "Rebuilt daily" was a configured claim. It's now stated as a best-effort schedule with
+  a watchdog, until a scheduled run is actually observed.
+
+### What broke (+ fix)
+- **The dropped scheduled run:** fixed with the second slot and the watchdog (CP-DEC 017).
+- **The spurious release from the unpinned Synthea end date:** fixed with a pinned `-e` (CP-DEC 018).
+- **The local Synthea test couldn't run:** Docker Desktop was off (exit 127), and the failed attempt cleared the
+  local Synthea output. It's regenerable, so verification moved to the GitHub runner.
+- **The private study guide went public by mistake.** A `git add -A` swept in `docs/EXPLAINER.md` and `.pdf`, the
+  owner-only study guide. They were untracked and gitignored in the next commit; they remain in history at
+  `343a2a0` (a history rewrite is Trevor's call).
+- **The watchdog's green-path test first failed with a GitHub 403.** The gh CLI's active account had changed to a
+  second login without admin rights. It was re-run with the owner's token for that one command; the global login was
+  left as Trevor set it.
+
+### Open / next
+- **Tomorrow's real test:** the 11:17 UTC scheduled run must fire *and* reproduce fingerprint `78bc6a4f…` with no new
+  release. That proves day-independence and the schedule together. If it's dropped, the 17:37 watchdog should catch
+  it.
+- Watch a full week; check Supabase stays active; consider alerting beyond the failed-run email.

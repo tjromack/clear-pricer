@@ -102,4 +102,6 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [ ] confirm the Supabase free-tier project stays active under the daily run (still active after night 1)
 - [x] schedule resilience after night 1's dropped run: second daily slot + freshness watchdog (CP-DEC 017)
 - [ ] observe a week of unattended runs; confirm the watchdog stays green on healthy days
+- [x] pin Synthea's end date so output is independent of the day it runs (CP-DEC 018)
+- [ ] confirm the first *scheduled* run fires and reproduces fingerprint `78bc6a4f` with no new release
 - [ ] alerting beyond GitHub's failed-run email (e.g. a webhook), if one inbox proves too easy to miss
