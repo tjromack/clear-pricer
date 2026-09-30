@@ -18,7 +18,7 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 5 · synthetic FHIR | `f5d2c42` | 240,237 resources; 1,200,521/1,200,521 refs resolve; no-PHI gate | 43,606 "dangling" refs were `#contained` references |
 | 6 · publish + serve | `ad54b89` | release fingerprint identical on GitHub runner and workstation; public | a DSN password leaked into a session (rotated; redaction added); Synthea not deterministic multi-threaded |
 | 7 · the analysis | `b9d46f3` | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
-| 8 · case study | (M8 commit) | `docs/CASE-STUDY.md`, with the drift log (21 entries) as its spine; every number checked against its source | two case-study claims were stronger than their evidence; tightened before shipping |
+| 8 · case study | `100fd91` | `docs/CASE-STUDY.md`, with the drift log (21 entries) as its spine; every number checked against its source | two case-study claims were stronger than their evidence; tightened before shipping |
 
 Where things are: decisions → `DECISIONS.md` (CP-DEC 001–016) · upstream deviations → `docs/schema-drift-log.md` ·
 reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · the case study → `docs/CASE-STUDY.md` · how to query → `docs/QUERY.md`.
