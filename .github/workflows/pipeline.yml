@@ -5,8 +5,13 @@
 name: pipeline
 
 on:
+  # Two daily slots, 12 h apart. GitHub schedules are best-effort: under load a scheduled run can be delayed or dropped
+  # outright -- the first scheduled run (2026-09-30 11:17 UTC) never fired. A second slot covers a dropped one, and a
+  # duplicate is harmless: runs queue (concurrency below) and an unchanged day publishes nothing. freshness.yml is the
+  # backstop if both are dropped (CP-DEC 017).
   schedule:
-    - cron: "17 11 * * *"  # daily, 11:17 UTC
+    - cron: "17 11 * * *"  # 11:17 UTC
+    - cron: "47 23 * * *"  # 23:47 UTC
   workflow_dispatch:
     inputs:
       release:

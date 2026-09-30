@@ -1,0 +1,51 @@
+# Freshness watchdog (CP-DEC 017): detect a missed daily run, heal it, and alert.
+#
+# GitHub scheduled runs are best-effort -- the pipeline's first scheduled run was silently dropped. This separate
+# workflow, on its own schedule, checks when the pipeline last *succeeded*. If that is older than the threshold it:
+#   1. re-enables the pipeline workflow (a no-op if enabled; covers GitHub auto-disabling schedules in public repos
+#      after 60 days without repository activity),
+#   2. dispatches a catch-up pipeline run, and
+#   3. fails on purpose, so GitHub sends the owner a failed-workflow notification.
+# A healthy day is a green no-op.
+name: freshness
+
+on:
+  schedule:
+    - cron: "37 17 * * *"  # 17:37 UTC, between the pipeline's two daily slots
+  workflow_dispatch:
+    inputs:
+      max_age_hours:
+        description: "Treat the pipeline as stale if its last success is older than this (hours)"
+        default: "26"
+
+permissions:
+  actions: write  # enable + dispatch the pipeline workflow
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MAX_AGE_HOURS: ${{ inputs.max_age_hours || '26' }}
+    steps:
+      - name: Check the pipeline's last successful run
+        run: |
+          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow pipeline.yml --status success --limit 1 \
+                   --json createdAt -q '.[0].createdAt // empty')
+          now=$(date -u +%s)
+          if [ -n "$last" ]; then
+            age_h=$(( (now - $(date -u -d "$last" +%s)) / 3600 ))
+          else
+            age_h=9999
+          fi
+          echo "last successful pipeline run: ${last:-never} (${age_h} h ago; threshold ${MAX_AGE_HOURS} h)"
+          if [ "$age_h" -le "$MAX_AGE_HOURS" ]; then
+            echo "fresh -- nothing to do"
+            exit 0
+          fi
+          gh workflow enable pipeline.yml --repo "$GITHUB_REPOSITORY" || true
+          gh workflow run pipeline.yml --repo "$GITHUB_REPOSITORY" -f release=true
+          echo "::error::pipeline stale (${age_h} h since last success) -- re-enabled and dispatched a catch-up run"
+          exit 1
