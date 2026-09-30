@@ -367,5 +367,17 @@ dollars are the same unit across hospitals.
   hide the payer-spread finding that is the story); including Northwestern's contracted dollars with a warning
   (numbers known to be broken would still get quoted).
 
+## CP-DEC 016 — v1 shipped with v2's features at three-hospital scale; v2 is the scale-out (2026-09-29)
+**Status:** Decided (Milestone 8). Records a scope fact; doesn't re-open CP-DEC 002.
+
+- CP-DEC 002 put NPPES reconciliation with an unresolved rate, a public read API and the price-variation analysis in
+  v2. The milestone spine (TODO M3–M7) built all of them at v1's three-hospital scale, with every gate in place first,
+  so "cut hospitals, not verification" held.
+- **What v1 can't do is what scale buys:** the unresolved-NPI rate is over 8 NPIs, and the same-code comparison
+  speaks for three hospitals, not the metro. **v2 is therefore defined as scale-out**: 50+ hospitals (every one
+  through the same gates, the same drift log and the same release fingerprint), plus a publicly hosted API.
+- *Rejected:* relabelling v1 as "v2 done" (the metro-level claims need the hospitals), and deferring the features to
+  keep the original labels (they were built and verified; hiding that would misstate the system).
+
 ---
-*Next entry = CP-DEC 016.*
+*Next entry = CP-DEC 017.*

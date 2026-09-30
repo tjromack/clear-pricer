@@ -17,8 +17,11 @@ hiding it.
 > **Public and synthetic data only — no PHI, no internal systems, no client data.** Where this touches a format that
 > normally carries PHI (FHIR), it uses **synthetic** bundles by construction and says so.
 
-**Demonstrates:** incremental pipelines with quality gates and schema-drift handling over messy public healthcare data —
-with the referential-integrity failures (price-file NPI → NPPES) published as a rate, not swept under the rug.
+**Demonstrates:** incremental pipelines with quality gates and schema-drift handling over messy public healthcare data,
+with the referential-integrity results (price-file NPI ↔ NPPES) published as rates.
+
+**Case study: [docs/CASE-STUDY.md](docs/CASE-STUDY.md)**: what the sources actually contained, the decisions it forced,
+and what broke along the way.
 
 ---
 
@@ -30,11 +33,12 @@ schema-drift handling and referential-integrity reconciliation over real public 
 
 ## What it does (v1 → v2)
 
-- **v1 (shipped 2026-09-29):** three Chicago hospitals — Northwestern Memorial, Rush, and University of Chicago Medical Center
-  (7.37M published charge rows as of 2026-09-29) — through a scheduled pipeline with quality gates, published as queryable Parquet, runnable locally with no cloud
-  credentials, rebuilt daily by a hosted GitHub Actions run.
-- **v2 (planned):** 50+ hospitals, NPPES reconciliation with a published unresolved-NPI rate, a public read API
-  (FastAPI + Supabase), and a written analysis of price variation for the same CPT code across the Chicago metro.
+- **v1 (shipped 2026-09-29):** three Chicago hospitals (Northwestern Memorial, Rush, and University of Chicago
+  Medical Center; 7.37M charge rows) through a gated pipeline, rebuilt daily by a hosted GitHub Actions run. It
+  includes NPPES change-data-capture, two-directional NPI reconciliation, a synthetic FHIR R4 path, a byte-reproducible
+  Parquet release, a read-only served tier and API, and a price-variation analysis.
+- **v2 (planned):** scale-out to 50+ hospitals, where the NPI rates become statistically meaningful and a
+  same-code comparison can speak for the metro; a publicly hosted API. See `DECISIONS.md` CP-DEC 016.
 
 ## What this does *not* let you claim
 
@@ -109,9 +113,12 @@ A failing gate turns the run red and **publish never runs**, so the served `publ
 gated build, and a parity check proves it matches DuckDB. To watch the gate fire, trigger the DAG with
 `{"source_overrides": {"rush": "tests/fixtures/broken_ragged_rows.csv"}}`. The DuckDB path above needs none of this.
 
-## How it's verified (the differentiator)
+## How it's verified
 
 Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned inputs):
+- **Reproducible across machines:** a GitHub runner (Linux) and a workstation (Windows) independently built the same
+  release, fingerprint `27a340045c24de0f…`, with all 13 Parquet files byte-identical. A fresh container with no clone
+  and no credentials queried it over HTTPS, including the full 7.37M-row fact.
 - **Quality gates that fail the run** (not warn): 80 dbt checks, covering row reconciliation, keys, enums, CMS
   required columns, the CDC history's invariants and the reconciliation's own rules. A deliberately broken input turns
   the Airflow run red, and publish never runs (run `broken_input_proof_1`).
@@ -121,8 +128,12 @@ Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned i
   ZIPs (46–65 across the threshold sensitivity band), published as evidence-backed candidates.
 - **Publisher conformance, measured:** e.g. 92.8% of Northwestern's payer rows report a median over zero claims;
   55.9% of its dollar-plus-percentage rates don't reconcile. See `rpt_source_conformance`.
-- **A schema-drift log** ([docs/schema-drift-log.md](docs/schema-drift-log.md)): what deviated upstream, when, and how
-  the pipeline handled it.
+- **A schema-drift log** ([docs/schema-drift-log.md](docs/schema-drift-log.md)): 21 upstream deviations, each with
+  when it was found and how the pipeline handles it (record, never drop).
+- **Parity:** every publish checks counts, distinct keys and money sums between DuckDB and the served Postgres, and
+  a mismatch fails the run.
+- **Price variation** ([docs/analysis/price-variation.md](docs/analysis/price-variation.md)): every number computed
+  from a pinned release by one command; tests enforce its method.
 - **Synthetic FHIR, validated** ([docs/results/fhir-mapping.md](docs/results/fhir-mapping.md)): 240,237 Synthea
   R4 resources; every one of 1,200,521 references resolves; a gate fails the run if any patient lacks Synthea's
   synthetic markers (no PHI, by construction and by test).
@@ -131,8 +142,8 @@ Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned i
 
 ## Stack
 
-Python · Airflow · dbt-core · DuckDB (local) / Postgres (Docker) / Supabase (served) · Docker · FastAPI · Synthea ·
-GitHub Actions. See `DECISIONS.md` for why each choice was made.
+Python · DuckDB · dbt-core · Airflow 3 · Postgres (Docker) / Supabase (served) · FastAPI · pyarrow / ijson · Synthea ·
+Docker · GitHub Actions. See `DECISIONS.md` (CP-DEC 001–016) for why each choice was made.
 
 ## License
 

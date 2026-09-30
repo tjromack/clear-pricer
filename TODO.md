@@ -86,10 +86,17 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
   dark, palette validated); results JSON; tests enforce the method and byte-reproducibility
 - [x] **Gate:** a reproducible, shareable analysis with its method + caveats stated. **stop**
 
-## Milestone 8 — case study + README results
-- [ ] `docs/CASE-STUDY.md` (schema-drift log is the spine) + README "How it's verified" with the real numbers
-- [x] Clean-clone check (GitHub Action) so Gate 1 is a badge, not a claim — landed early, in M6 (`ci.yml`)
-- [ ] **stop**
+## Milestone 8 — case study + README results ✅ (2026-09-29)
+- [x] `docs/CASE-STUDY.md` (schema-drift log is the spine) + README "How it's verified" with the real numbers
+- [x] Clean-clone check (GitHub Action) so Gate 1 is a badge, not a claim — landed in M6 (`ci.yml`)
+- [x] Voice pass over public docs (CLAUDE.md case-study rules); every case-study number checked against its source
+- [x] v1/v2 scope recorded (CP-DEC 016): v1 shipped with v2's features at three-hospital scale; v2 = scale-out
+- [x] **stop**
 
 ## Later / maybe
-- [ ] more metros; a hosted read API; a second CPT-comparison analysis
+- [ ] v2 scale-out: 50+ hospitals through the same gates (CP-DEC 016); more metros
+- [ ] publicly hosted API (FastAPI) — a hosting decision
+- [ ] FHIR ExplanationOfBenefit adjudication (payment detail; 5.3% mapped today)
+- [ ] NPPES secondary practice locations (widens NPI completeness matching)
+- [ ] per-hospital "comparable-price share" tracked across releases
+- [ ] confirm the Supabase free-tier project stays active under the daily run

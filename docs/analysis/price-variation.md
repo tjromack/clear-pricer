@@ -146,8 +146,7 @@ Rush does. Rush's contracts are much flatter across its payers — but its tail 
 - **Line items are not identical across hospitals.** One code can bundle different supplies, professional vs. facility
   components, or modifiers; medians reduce but do not remove this.
 - **Publish dates differ:** Northwestern and UChicago published their files on 2026-04-01; Rush on 2026-09-25.
-- **Northwestern's contracted prices are not compared**, for the reasons in section 1 — a limit of its file, stated
-  rather than papered over.
+- **Northwestern's contracted prices are not compared**, for the reasons in section 1 — a limit of its published file.
 
 ## Reproduce
 

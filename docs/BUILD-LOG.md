@@ -1,7 +1,7 @@
 # clear-pricer — build log
 
 A running, dated record of noteworthy process, decisions, learnings, and what-broke moments as clear-pricer is built.
-**The primary raw material for the case study and any other writing** — kept honest and specific, numbers only when
+**The primary raw material for the case study and any other writing** — kept specific, numbers only when
 measured. Per `CLAUDE.md`, keeping this current is part of each milestone's definition of done.
 
 Entry template: **What happened · Decisions · Learnings · What broke (+ fix) · Open/next.**
@@ -18,9 +18,10 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 5 · synthetic FHIR | `f5d2c42` | 240,237 resources; 1,200,521/1,200,521 refs resolve; no-PHI gate | 43,606 "dangling" refs were `#contained` references |
 | 6 · publish + serve | `ad54b89` | release fingerprint identical on GitHub runner and workstation; public | a DSN password leaked into a session (rotated; redaction added); Synthea not deterministic multi-threaded |
 | 7 · the analysis | `b9d46f3` | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
+| 8 · case study | (M8 commit) | `docs/CASE-STUDY.md`, with the drift log (21 entries) as its spine; every number checked against its source | two case-study claims were stronger than their evidence; tightened before shipping |
 
-Where things are: decisions → `DECISIONS.md` (CP-DEC 001–015) · upstream deviations → `docs/schema-drift-log.md` ·
-reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · how to query → `docs/QUERY.md`.
+Where things are: decisions → `DECISIONS.md` (CP-DEC 001–016) · upstream deviations → `docs/schema-drift-log.md` ·
+reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · the case study → `docs/CASE-STUDY.md` · how to query → `docs/QUERY.md`.
 
 ---
 
@@ -383,7 +384,7 @@ reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis
 - **The registry has its own data-quality problems:** an individual registered as a Type 2 children's hospital at
   UChicago's address, and hospitals registered under typo'd names ("NORWESTERN", "SROGER", "CHICAGP").
 - **NPPES history makes an as-of check possible:** each disclosed NPI's status on the day the hospital published. For
-  one NM NPI it's NULL because that NPI's history starts after April. That's honest: the history only knows versions
+  one NM NPI it's NULL because that NPI's history starts after April: the history only knows versions
   from each record's last update on.
 
 ### What broke (+ fix)
@@ -619,3 +620,45 @@ reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis
 - **Milestone 8 (awaiting approval):** `docs/CASE-STUDY.md` (the schema-drift log as its spine) and the final README
   "How it's verified" with real numbers. The clean-clone CI badge already landed in M6.
 - Candidate v2 metric: a per-hospital "comparable-price share" (the section 1 table), tracked over releases.
+
+---
+
+## 2026-09-29 — Milestone 8 (case study + README results)
+
+### What happened
+- **A voice pass first.** I checked the public docs against the CLAUDE.md case-study rules (no honesty-signalling;
+  limits stated as facts about the system) and fixed three slips: one phrase in the analysis's caveats, one in this
+  log, and one in a docstring. DECISIONS.md is append-only and quotes the original brief, so it was left as written.
+- **Wrote `docs/CASE-STUDY.md`** for hiring managers and data engineers:
+  - the problem, and the system as a Mermaid diagram (rendered with mermaid-cli to confirm it parses);
+  - a headline numbers table;
+  - **the drift log as the spine**, grouped as format → semantics → registry → generator;
+  - the six decisions that shaped it, the results, and what broke and what it taught;
+  - how it's verified, its limits as scope facts, and a three-line try-it.
+- **Fact-checked every number** against its source (drift log, results files, release manifest, this log). Two
+  claims were stronger than their evidence and were tightened:
+  - CI asserts that the broken fixtures *fail the run*; that each trips its *intended* gate was verified by hand in
+    M1.
+  - A CMS "quote" was a paraphrase; it's now reported speech.
+- **README final pass:** a case-study link near the top; "How it's verified" gained cross-machine reproducibility,
+  the stranger test, parity, the drift-log count and the analysis; v1/v2 were rewritten to match what shipped; the
+  stack line updated.
+- **Recorded CP-DEC 016:** v1 shipped with v2's features (reconciliation, API, analysis) at three-hospital scale,
+  so v2 is now defined as the scale-out, which is what makes the NPI rates and a metro-level claim meaningful.
+  TODO's "Later" list now holds the concrete follow-ups found along the way.
+
+### Decisions (→ CP-DEC 016)
+- v1/v2 scope recorded rather than silently relabelled.
+
+### Learnings
+- **A case study is a second verification pass.** Writing each claim next to its source caught two overstatements
+  that had survived every earlier review.
+- **The drift log became the spine without being restructured.** Because it was written as each deviation was found,
+  with what drifted, how it's handled and the number, it read as a narrative once it was grouped.
+
+### What broke (+ fix)
+- Nothing in the pipeline. Two case-study claims needed tightening (above).
+
+### Open / next (post-v1)
+- The Supabase free-tier pause check (memory saved; revisit after about a week of daily runs).
+- v2 scale-out (CP-DEC 016); the "Later" list in TODO.md.

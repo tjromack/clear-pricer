@@ -1,7 +1,7 @@
 """NPPES (NPI registry) ingestion: discovery, projection, and change-data-capture into a type-2 history.
 
 CMS publishes a monthly full file (~11.7 GB CSV, 330 columns, zipped to ~1.1 GB) plus weekly incremental files. The
-honest model is CDC, not truncate-and-reload (design pin 2):
+right model is CDC, not truncate-and-reload (design pin 2):
 
 - every file is streamed straight out of its zip, projected to the ~25 columns this project uses, and staged as
   Parquet (the other columns are deliberately not modelled; the *header* is still checked in full for drift);
