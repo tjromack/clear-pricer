@@ -34,7 +34,8 @@ schema-drift handling and referential-integrity reconciliation over real public 
 ## What it does (v1 → v2)
 
 - **v1 (shipped 2026-09-29):** three Chicago hospitals (Northwestern Memorial, Rush, and University of Chicago
-  Medical Center; 7.37M charge rows) through a gated pipeline, rebuilt daily by a hosted GitHub Actions run. It
+  Medical Center; 7.37M charge rows) through a gated pipeline, rebuilt on a hosted GitHub Actions schedule (two daily slots plus a freshness
+  watchdog that heals and alerts on a missed day). It
   includes NPPES change-data-capture, two-directional NPI reconciliation, a synthetic FHIR R4 path, a byte-reproducible
   Parquet release, a read-only served tier and API, and a price-variation analysis.
 - **v2 (planned):** scale-out to 50+ hospitals, where the NPI rates become statistically meaningful and a
@@ -128,7 +129,7 @@ Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned i
   ZIPs (46–65 across the threshold sensitivity band), published as evidence-backed candidates.
 - **Publisher conformance, measured:** e.g. 92.8% of Northwestern's payer rows report a median over zero claims;
   55.9% of its dollar-plus-percentage rates don't reconcile. See `rpt_source_conformance`.
-- **A schema-drift log** ([docs/schema-drift-log.md](docs/schema-drift-log.md)): 21 upstream deviations, each with
+- **A schema-drift log** ([docs/schema-drift-log.md](docs/schema-drift-log.md)): 22 upstream deviations, each with
   when it was found and how the pipeline handles it (record, never drop).
 - **Parity:** every publish checks counts, distinct keys and money sums between DuckDB and the served Postgres, and
   a mismatch fails the run.
@@ -143,7 +144,7 @@ Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned i
 ## Stack
 
 Python · DuckDB · dbt-core · Airflow 3 · Postgres (Docker) / Supabase (served) · FastAPI · pyarrow / ijson · Synthea ·
-Docker · GitHub Actions. See `DECISIONS.md` (CP-DEC 001–016) for why each choice was made.
+Docker · GitHub Actions. See `DECISIONS.md` (CP-DEC 001–018) for why each choice was made.
 
 ## License
 

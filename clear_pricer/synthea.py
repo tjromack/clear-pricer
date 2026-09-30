@@ -21,6 +21,10 @@ JAR_URL = f"https://github.com/synthetichealth/synthea/releases/download/{SYNTHE
 JAR_SHA256 = "ed43c20ad40ba5c3bc724503a5af032715fe3c491620b766148e7c2361e6ecc1"
 IMAGE = "eclipse-temurin:21-jre"
 SEED, REFERENCE_DATE = "20260929", "20260901"
+# The simulation END date defaults to *today*, so an unpinned run grows by a day of history every day (found
+# 2026-09-30: +6 Observations, +6 Procedures, +1 Claim vs the day before). Pinning it to the reference date makes the
+# population independent of the day it is generated, not just of the machine (CP-DEC 018).
+END_DATE = REFERENCE_DATE
 
 
 def generate(root: Path, population: int = 200, log=lambda m: print(m, flush=True)) -> dict:
@@ -35,7 +39,7 @@ def generate(root: Path, population: int = 200, log=lambda m: print(m, flush=Tru
     out = root / "output"
     if out.exists():
         shutil.rmtree(out)  # a population is regenerated whole, never appended to
-    args = ["-s", SEED, "-cs", SEED, "-r", REFERENCE_DATE, "-p", str(population),
+    args = ["-s", SEED, "-cs", SEED, "-r", REFERENCE_DATE, "-e", END_DATE, "-p", str(population),
             "--exporter.baseDirectory=/work/output", "--exporter.fhir.export=true",
             "--exporter.hospital.fhir.export=true", "--exporter.practitioner.fhir.export=true",
             "--exporter.csv.export=false", "--exporter.text.export=false", "Illinois", "Chicago"]

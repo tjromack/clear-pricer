@@ -44,7 +44,8 @@ flowchart LR
   R --> AN[Analysis]
 ```
 
-The same CLI steps run under **Airflow 3** (local, Docker) and a **GitHub Actions** schedule (hosted, daily):
+The same CLI steps run under **Airflow 3** (local, Docker) and a **GitHub Actions** schedule (hosted, two daily
+slots, watched by a freshness check; see below):
 `stage ×3 + nppes-sync + fhir-stage → build (gates) → publish → export → release`. DuckDB is the local engine and
 Postgres the served one, and every publish is checked for parity between them.
 
@@ -59,7 +60,7 @@ Postgres the served one, and every publish is checked for parity between them.
 
 ## The spine: what the sources actually contained
 
-The [schema-drift log](schema-drift-log.md) was written as each deviation was found, 21 entries. It's the most
+The [schema-drift log](schema-drift-log.md) was written as each deviation was found, 22 entries. It's the most
 useful artifact the project produced, and the rest of the design follows from it. The design rule was **record,
 never drop**: every column, value or row the parsers couldn't map is kept and counted in a published conformance
 table, `rpt_source_conformance`.
@@ -106,7 +107,7 @@ table, `rpt_source_conformance`.
 
 ## Decisions that shaped it
 
-All 16 are in [DECISIONS.md](../DECISIONS.md), each with the rejected alternative. The ones that mattered most:
+All 18 are in [DECISIONS.md](../DECISIONS.md), each with the rejected alternative. The ones that mattered most:
 
 1. **Integrity gates fail; source findings are published** (CP-DEC 007). A missing required column, lost rows,
    quarantine above 1%, a broken reference or a non-synthetic patient turns the run red. A hospital's own spec
@@ -153,12 +154,23 @@ The [build log](BUILD-LOG.md) records each break as it happened. The ones that c
 - **A leaked password.** During setup, a failed connection test printed a database DSN, password included, because
   the driver echoes it. The password was rotated. Every connection now runs under a guard that redacts DSN passwords
   from errors, with a regression test for the exact case. The history was scanned clean before going public.
+- **"Deterministic" on one day.** On day 2 the hosted run cut a new release with no upstream change. The synthetic
+  population had grown by a day of simulated history, because Synthea's end date defaults to *today*. The day-1
+  cross-machine proof had compared two builds from the same day. The end date is now pinned (CP-DEC 018): reproducible
+  on any machine *and any day*. **Hunt for the clock.**
 - **"Deterministic" on one machine.** Two builds on one workstation agreed. A hosted build didn't, in 3 of 13 files.
   Row-level diffs traced it to `any_value` thread scheduling, multi-threaded Synthea, and a ledger that included
   machine-specific proof runs. All three were fixed, and the fingerprints then matched across machines.
 - **A plausible wrong answer.** The first cut of the analysis said Rush was the most expensive hospital on 398 of
   534 codes. Asking what kind of dollar each "negotiated rate" was exposed list-price Medicare Advantage rates, case
   packages and unit artifacts. The analysis now opens with a table of what each dollar actually is.
+- **The first night: a schedule that never fired.** The first unattended night, the scheduled 11:17 UTC run simply
+  didn't happen. GitHub treats scheduled runs as best-effort and can drop them under load, and nothing noticed. The
+  fix monitors the outcome, not the trigger. There are now two daily slots, 12 hours apart, and a separate freshness
+  watchdog. If the last successful run is more than 26 hours old, it re-enables the workflow, dispatches a catch-up
+  run and fails on purpose so the owner is alerted. It was proven by forcing it stale: it dispatched the catch-up run
+  and raised the alert. No data was lost that day, because no upstream file had changed. **A job that doesn't start
+  can't report its own failure.**
 
 ## How it's verified
 
@@ -175,6 +187,8 @@ The [build log](BUILD-LOG.md) records each break as it happened. The ones that c
   byte-identically from a pinned release with one command.
 - **A stranger's path.** A fresh container with no clone and no credentials queried the release over HTTPS,
   including the full 7.37M-row fact. CI does the clean-clone equivalent on every push.
+- **Liveness, not just correctness.** A freshness watchdog checks that the pipeline has *succeeded* within 26 hours,
+  heals a missed day, and alerts (CP-DEC 017).
 
 ## Limits
 
@@ -188,8 +202,10 @@ The [build log](BUILD-LOG.md) records each break as it happened. The ones that c
 - **FHIR is synthetic by construction** (a gate enforces it), so it demonstrates the path, not clinical findings.
 - **Not modelled yet:** NPPES secondary practice locations, and FHIR ExplanationOfBenefit adjudication (the payment
   detail).
-- **Hosting:** Supabase free tier (a 500 MB database, and projects pause without activity; the daily run is expected
-  to keep it active). FastAPI isn't deployed to a public host.
+- **Hosting:** Supabase free tier (a 500 MB database, and projects pause without activity; still active after the
+  first night). FastAPI isn't deployed to a public host.
+- **Scheduling is best-effort.** All three schedules (two pipeline slots and the watchdog) run on GitHub Actions, so
+  a platform-wide scheduling outage would defeat them together. A missed day is healed and alerted, not prevented.
 
 ## Try it
 

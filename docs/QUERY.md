@@ -74,7 +74,7 @@ Served tables: `agg_code_prices`, `rpt_npi_reconciliation`, `rpt_npi_resolution`
 git clone https://github.com/tjromack/clear-pricer && cd clear-pricer
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-clear-pricer run rush          # fetch -> parse -> stage -> dbt build with every gate (~40 s)
+clear-pricer run rush          # fetch -> parse -> stage -> dbt build with every gate (~20 s)
 ```
 
 Then query `data/warehouse/clear_pricer.duckdb`, or run the read API over a release:
