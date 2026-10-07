@@ -157,6 +157,14 @@ def cmd_release(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_verify_release(args: argparse.Namespace) -> int:
+    from clear_pricer.checks import verify_release
+
+    if not args.tag and not args.dir:
+        args.tag = "latest"
+    return verify_release(args.tag, Path(args.dir).resolve() if args.dir else None, keep=args.keep)
+
+
 def cmd_analysis(args: argparse.Namespace) -> int:
     from clear_pricer.analysis import run
 
@@ -198,6 +206,11 @@ def main(argv: list[str] | None = None) -> int:
     rl = sub.add_parser("release", help="GitHub Release of data/published/ when its fingerprint changed")
     rl.add_argument("--force", action="store_true")
     rl.set_defaults(func=cmd_release)
+    vr = sub.add_parser("verify-release", help="recompute a release's check values from a clean download (curl)")
+    vr.add_argument("--tag", help="a data release tag, or 'latest' (the default when --dir is not given)")
+    vr.add_argument("--dir", help="verify this directory (with --tag: download into it; alone: verify it offline)")
+    vr.add_argument("--keep", action="store_true", help="keep the temporary download")
+    vr.set_defaults(func=cmd_verify_release)
     an = sub.add_parser("analysis", help="the M7 price-variation analysis (docs/analysis/)")
     an.add_argument("--release", help="a data release tag to read over HTTPS (default: local data/published)")
     an.set_defaults(func=cmd_analysis)

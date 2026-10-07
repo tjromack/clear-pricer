@@ -3,10 +3,14 @@
 The release is the stranger's path to the full detail (design pin 5): no database, no account, no credentials --
 download the Parquet (or read it straight over HTTPS) and query it with DuckDB.
 
-Deterministic: rows are written in a total order with a single thread, so the same warehouse yields byte-identical
-files. `manifest.json` pins every file (rows, bytes, SHA-256) and every input (price-file hashes, NPPES files applied,
+Deterministic: rows are written in their grain key's order (a total order: the key is gated unique) with a single
+thread, so the same warehouse yields byte-identical files. `manifest.json` pins every file (rows, bytes, SHA-256) and every input (price-file hashes, NPPES files applied,
 Synthea version); its `fingerprint` hashes the inputs and the output files, and a new release is cut only when it
 changes -- a daily hosted run with nothing new upstream (and no logic change) publishes nothing.
+
+`check_values.json` ships next to the Parquet (CP-DEC 020): rows, distinct keys, fan-out and checksums, computed from
+the warehouse *and* from the written Parquet. The two must agree or the export fails, and `clear-pricer
+verify-release` recomputes them from a clean download.
 """
 
 from __future__ import annotations
@@ -18,9 +22,10 @@ from pathlib import Path
 
 import duckdb
 
-from clear_pricer.publish import SERVED, served_name
+from clear_pricer.checks import RELEASE_GRAIN, check_values, diff, key_sql, parquet_rel, problems, warehouse_rel
+from clear_pricer.publish import served_name
 
-RELEASE_TABLES = ("fct_standard_charges", "dim_charge_codes") + SERVED
+RELEASE_TABLES = tuple(RELEASE_GRAIN)  # the Parquet release: every gated mart + the NPPES history (CP-DEC 019)
 REPO_SLUG = "tjromack/clear-pricer"
 
 
@@ -52,18 +57,28 @@ def export(warehouse: Path, out_dir: Path, log=lambda m: print(m, flush=True)) -
     for t in RELEASE_TABLES:
         name = served_name(t)
         path = out_dir / f"{name}.parquet"
-        con.sql(f"COPY (SELECT * FROM main.{t} ORDER BY ALL) TO '{path.as_posix()}' "
+        con.sql(f"COPY (SELECT * FROM main.{t} ORDER BY {key_sql(t)}) TO '{path.as_posix()}' "
                 "(FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 122880)")
         rows = con.sql(f"SELECT count(*) FROM main.{t}").fetchone()[0]
         files.append({"file": path.name, "rows": rows, "bytes": path.stat().st_size, "sha256": _sha256(path)})
         log(f"[export] {path.name}: {rows:,} rows, {path.stat().st_size / 1e6:.1f} MB")
     ins = inputs(con)
+    # the same check values from the warehouse and from the Parquet just written: a mismatch means data changed on
+    # the way out (a type, a row), and nothing is published
+    values = check_values(con, warehouse_rel)
+    written = check_values(con, parquet_rel(out_dir))
     con.close()
+    bad = diff(values, written) + problems(values)
+    if bad:
+        raise RuntimeError("export check values failed:\n  " + "\n  ".join(bad))
+    cv_path = out_dir / "check_values.json"
+    cv_path.write_text(json.dumps(values, indent=2), encoding="utf-8", newline="\n")
+    log(f"[export] check_values.json: warehouse and Parquet agree on {len(values['tables'])} tables")
     # inputs AND output hashes: exports are byte-deterministic, so this changes exactly when the published data would
     # (new upstream files, or a logic change that moves a number) -- and never otherwise
     fingerprint = hashlib.sha256(json.dumps({"inputs": ins, "outputs": [f["sha256"] for f in files]},
                                             sort_keys=True).encode()).hexdigest()
-    manifest = {"fingerprint": fingerprint, "inputs": ins, "files": files}
+    manifest = {"fingerprint": fingerprint, "inputs": ins, "files": files, "check_values_sha256": _sha256(cv_path)}
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8", newline="\n")
     return manifest
 
@@ -106,9 +121,13 @@ def release(out_dir: Path, date: str, *, force: bool = False, log=lambda m: prin
         rows,
         "",
         "Query without cloning: see `docs/QUERY.md`. Inputs (price-file hashes, NPPES files, Synthea version) are pinned "
-        "in `manifest.json`. Public data + synthetic FHIR only; no PHI.",
+        "in `manifest.json`; row counts, distinct keys, fan-out and checksums in `check_values.json` (grain: "
+        "`docs/grain.md`). Verify from a clean download: `clear-pricer verify-release --tag <this tag>`. "
+        "Public data + synthetic FHIR only; no PHI.",
     ])
     assets = [str(out_dir / f["file"]) for f in manifest["files"]] + [str(out_dir / "manifest.json")]
+    if (out_dir / "check_values.json").exists():
+        assets.append(str(out_dir / "check_values.json"))
     _gh("release", "create", tag, "--repo", REPO_SLUG, "--title", f"Data release {date}", "--notes", notes, *assets)
     log(f"[release] created {tag} with {len(assets)} assets")
     return tag

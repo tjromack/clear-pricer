@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: fct_standard_charges
+    tests:
+      - grain:
+          arguments:
+            key: [charge_id]
     columns:
       - name: charge_id
         tests: [unique, not_null]
@@ -37,6 +41,10 @@ models:
                 values: ["0", "1-10", "11+", invalid]
 
   - name: dim_charge_codes
+    tests:
+      - grain:
+          arguments:
+            key: [item_id, code_seq]
     columns:
       - name: item_id
         tests:
@@ -64,6 +72,10 @@ models:
                 values: [active, deactivated, absent_from_full]
 
   - name: rpt_npi_resolution
+    tests:
+      - grain:
+          arguments:
+            key: [hospital_id, npi]
     description: Direction 1 -- each disclosed Type 2 NPI resolved against NPPES, with the evidence and an outcome.
     columns:
       - name: outcome
@@ -76,6 +88,10 @@ models:
                          resolved_verified]
 
   - name: rpt_npi_completeness
+    tests:
+      - grain:
+          arguments:
+            key: [hospital_id, npi]
     description: Direction 2 -- NPPES hospital NPIs under the hospital's name at its addresses/campus, disclosed or not.
     columns:
       - name: tier
@@ -86,7 +102,65 @@ models:
                 values: [1, 2, 3, 4]
 
   - name: rpt_npi_reconciliation
+    tests:
+      - grain:
+          arguments:
+            key: [hospital_id]
     description: Headline reconciliation numbers per hospital and overall.
     columns:
       - name: hospital_id
         tests: [unique, not_null]
+
+  - name: agg_code_prices
+    tests:
+      - grain:
+          arguments:
+            key: [hospital_id, code_family, code, setting, rate_basis]
+
+  - name: rpt_source_conformance
+    tests:
+      - grain:
+          arguments:
+            key: [hospital_id, kind, '"column"']
+
+  - name: rpt_nppes_file_log
+    tests:
+      - grain:
+          arguments:
+            key: [seq]
+
+  - name: dim_modifiers
+    tests:
+      - grain:
+          arguments:
+            key: [hospital_id, code, setting, payer_name, plan_name]
+
+  - name: rpt_fhir_summary
+    tests:
+      - grain:
+          arguments:
+            key: [resource_type]
+
+  - name: rpt_fhir_mapping
+    tests:
+      - grain:
+          arguments:
+            key: [resource_type, path]
+
+  - name: rpt_fhir_code_bridge
+    tests:
+      - grain:
+          arguments:
+            key: [code_system]
+
+  - name: rpt_fhir_claim_totals
+    tests:
+      - grain:
+          arguments:
+            key: [claim_type]
+
+  - name: dim_provider_history
+    tests:
+      - grain:
+          arguments:
+            key: [npi, version]

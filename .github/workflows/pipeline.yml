@@ -1,7 +1,7 @@
 # The hosted daily run (CP-DEC 009): the same CLI steps as the Airflow DAG, on a GitHub runner, so nothing depends on
 # a machine being up. Order: stage x3 + NPPES sync + FHIR -> dbt build (every gate) -> publish to Supabase -> export
-# Parquet -> GitHub Release (only when the output fingerprint changed). A failing gate fails the job before anything
-# is published or released.
+# Parquet -> GitHub Release (only when the output fingerprint changed) -> verify the latest release from a clean
+# download. A failing gate fails the job before anything is published or released.
 name: pipeline
 
 on:
@@ -93,6 +93,13 @@ jobs:
       - name: Release (if the fingerprint changed)
         if: github.event_name == 'schedule' || inputs.release
         run: clear-pricer release
+      # The published release must reproduce its own check values from a clean download (CP-DEC 020). Runs whether or
+      # not this run cut a release: either way it proves what a stranger downloads today.
+      - name: Verify the latest release from a clean download
+        if: github.event_name == 'schedule' || inputs.release
+        run: |
+          rm -rf "$CLEAR_PRICER_DATA_DIR"/staging "$CLEAR_PRICER_DATA_DIR"/raw  # room for a second copy
+          clear-pricer verify-release --tag latest --dir "$CLEAR_PRICER_DATA_DIR/verify"
       - name: Summary
         if: always()
         run: |

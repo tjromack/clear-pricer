@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_hpt__files
+    tests:
+      - grain:
+          arguments:
+            key: [hospital_id]
     description: One row per staged source file (the current file for each hospital) + its header metadata.
     columns:
       - name: hospital_id

@@ -22,10 +22,10 @@ from pathlib import Path
 
 import duckdb
 
-# the 9.8M-row NPPES registry itself is not re-served anywhere: CMS publishes it (CP-DEC 010)
+# The 9.86M-row NPPES history ships in the Parquet release only (CP-DEC 019): it is not served from a database.
 SERVED = ("agg_code_prices", "rpt_npi_reconciliation", "rpt_npi_resolution", "rpt_npi_completeness",
           "rpt_source_conformance", "stg_hpt__files", "rpt_nppes_file_log", "dim_modifiers",
-          "rpt_fhir_summary", "rpt_fhir_mapping", "rpt_fhir_code_bridge")
+          "rpt_fhir_summary", "rpt_fhir_mapping", "rpt_fhir_code_bridge", "rpt_fhir_claim_totals")
 TARGETS = {
     "local": ("fct_standard_charges", "dim_charge_codes") + SERVED,
     "supabase": SERVED,
@@ -49,6 +49,7 @@ PARITY = {
     "rpt_fhir_summary": "count(*), sum(resources), sum(mapped_paths), sum(structural_issues)",
     "rpt_fhir_mapping": "count(*), sum(occurrences), count(*) filter (where mapped)",
     "rpt_fhir_code_bridge": "count(*), sum(claim_lines), sum(codes_with_a_price_file_code)",
+    "rpt_fhir_claim_totals": "count(*), sum(claims), sum(header_cents), sum(lines_cents), sum(header_equals_lines)",
 }
 
 

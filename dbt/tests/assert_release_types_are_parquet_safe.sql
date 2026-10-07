@@ -12,6 +12,8 @@
 -- depends_on: {{ ref('rpt_fhir_summary') }}
 -- depends_on: {{ ref('rpt_fhir_mapping') }}
 -- depends_on: {{ ref('rpt_fhir_code_bridge') }}
+-- depends_on: {{ ref('rpt_fhir_claim_totals') }}
+-- depends_on: {{ ref('dim_provider_history') }}
 -- Release gate: Parquet has no 128-bit integer, so DuckDB would silently write HUGEINT columns as DOUBLE (counts
 -- would come back as 8.0). No table that ships in the release may carry a HUGEINT/UHUGEINT column.
 select table_name, column_name, data_type
