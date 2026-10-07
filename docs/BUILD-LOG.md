@@ -824,6 +824,22 @@ release"). A1, A2 and A4 belong to other repos and were not touched here.
 - **Learning:** a key has to mean the same thing on every machine. A counter is an identity *on one machine*;
   publishing it, let alone keying on it, needs it to be derived from the data.
 
+### The afternoon scheduled run failed (same day)
+- Run 37661964432 (11:17 slot, fired 17:48 UTC) failed in **Stage Northwestern**: `curl: (92) HTTP/2 stream 1 was not
+  closed cleanly: CANCEL`. Northwestern's server cut the 5 GB download off 23 minutes in. Everything downstream was
+  skipped, so nothing was published: Supabase and the latest release kept the last gated build. GitHub emailed the
+  failure. (The traceback in the log's summary step is a side effect: `report` found no warehouse to read.)
+- **Gap found: the hosted path didn't retry what the DAG retries.** The Airflow DAG gives stage tasks `retries=2` for
+  network fetches; the GitHub workflow had none. curl's own `--retry` covers connection failures, timeouts and 5xx,
+  not a stream cut off mid-transfer.
+- **Fix:** `fetch._curl` restarts a transfer the network broke (curl exits 6, 7, 16, 18, 28, 52, 55, 56, 92) once,
+  from scratch, after 60 s; HTTP errors and everything else still fail at once. A restart rewrites the file whole
+  before it is hashed, so bytes are never spliced. Two NM attempts (~34 min each) fit the 120-minute job limit.
+  Tested with a faked curl: a reset is retried, retries are bounded, non-network failures aren't retried.
+- **Learning:** two schedulers running "the same CLI" still need the same failure policy. Retries lived in the
+  Airflow task definition, not the CLI, so the hosted path lacked them. They now live in the CLI, where both paths
+  get them.
+
 ### History rewrite (same day)
 - At Trevor's request, the study guide committed by mistake on 2026-09-30 was removed from git history. With
   `git filter-branch --index-filter 'git rm --cached …'`, the six commits from the 2026-09-30 Synthea end-date pin on

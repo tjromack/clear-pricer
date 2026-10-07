@@ -39,18 +39,41 @@ class LandedFile:
     fixes: tuple[str, ...]  # discovery corrections, surfaced as drift by staging
 
 
-def _curl(url: str, out: Path, headers: Path | None = None, etag: Path | None = None, compare: bool = False) -> int:
-    """Returns the final HTTP status. With `etag`, saves the response ETag there; with `compare`, sends it."""
+# curl exit codes for a transfer the network broke, not the server refused: DNS (6), connect (7), HTTP/2 framing
+# (16), partial file (18), timeout (28), empty reply (52), send/recv failure (55, 56), HTTP/2 stream reset (92).
+# curl's own --retry covers connection failures, timeouts and 5xx, but not a stream cut off mid-transfer: on
+# 2026-10-07 Northwestern's server cancelled the 5 GB download 23 minutes in (exit 92) and the hosted run failed.
+# The Airflow DAG retries stage tasks for this; the hosted path now does too, here, for network failures only.
+TRANSIENT_CURL_EXITS = frozenset({6, 7, 16, 18, 28, 52, 55, 56, 92})
+ATTEMPTS = 2       # a full NM re-download is ~34 min; two fit the hosted job's 120-minute limit
+RETRY_WAIT_S = 60
+
+
+def _curl(url: str, out: Path, headers: Path | None = None, etag: Path | None = None, compare: bool = False,
+          *, attempts: int = ATTEMPTS, wait_s: float = RETRY_WAIT_S, log=print) -> int:
+    """Returns the final HTTP status. With `etag`, saves the response ETag there; with `compare`, sends it.
+
+    A transfer broken by the network is restarted from scratch (up to `attempts` in all); any other failure, such
+    as an HTTP error, raises at once. A restart never splices bytes: `out` is rewritten whole, then hashed."""
+    import time
+
     cmd = ["curl", "-sS", "-L", "--fail", "--retry", "3", "-A", "clear-pricer/0.1 (+github.com/tjromack/clear-pricer)",
            "-w", "%{http_code}", "-o", str(out)]
     if headers is not None:
         cmd += ["-D", str(headers)]
     if etag is not None:
         cmd += (["--etag-compare", str(etag)] if compare else []) + ["--etag-save", str(etag)]
-    proc = subprocess.run(cmd + [url], capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise FetchError(f"curl failed ({proc.returncode}) for {url}: {proc.stderr.strip()}")
-    return int(proc.stdout.strip()[-3:] or 0)
+    for attempt in range(1, attempts + 1):
+        proc = subprocess.run(cmd + [url], capture_output=True, text=True)
+        if proc.returncode == 0:
+            return int(proc.stdout.strip()[-3:] or 0)
+        if proc.returncode not in TRANSIENT_CURL_EXITS or attempt == attempts:
+            raise FetchError(f"curl failed ({proc.returncode}) for {url} after {attempt} attempt(s): "
+                             f"{proc.stderr.strip()}")
+        log(f"[fetch] curl exit {proc.returncode} (network) for {url}; retrying from scratch in {wait_s:.0f}s "
+            f"({attempt}/{attempts})")
+        time.sleep(wait_s)
+    raise AssertionError("unreachable")
 
 
 def _sha256(path: Path) -> str:
