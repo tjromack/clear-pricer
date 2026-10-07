@@ -19,8 +19,8 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 6 · publish + serve | `ad54b89` | release fingerprint identical on GitHub runner and workstation; public | a DSN password leaked into a session (rotated; redaction added); Synthea not deterministic multi-threaded |
 | 7 · the analysis | `b9d46f3` | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
 | 8 · case study | `100fd91` | `docs/CASE-STUDY.md`, with the drift log (21 entries) as its spine; every number checked against its source | two case-study claims were stronger than their evidence; tightened before shipping |
-| night 1 · unattended | `343a2a0` | watchdog proven both ways; release rebuilt with pinned Synthea end date (`78bc6a4f`) | the first scheduled run looked dropped (it was 5h32m late — corrected 2026-10-07), and a catch-up run cut a spurious release (Synthea's end date = today) |
-| A3 · drillable release | `5204559` · `8be7e5c` | `data-2026-10-07-67efd3d2`: 15 files + check values, verified from a clean download; 63 gates; fan-out 3.07× | the week's run history showed night 1's "dropped" run was late; header vs lines found 0 of 21,785 synthetic claims add up |
+| night 1 · unattended | `295dad5` | watchdog proven both ways; release rebuilt with pinned Synthea end date (`78bc6a4f`) | the first scheduled run looked dropped (it was 5h32m late — corrected 2026-10-07), and a catch-up run cut a spurious release (Synthea's end date = today) |
+| A3 · drillable release | `e1bf4cb` · `0e55b4f` | `data-2026-10-07-67efd3d2`: 15 files + check values, verified from a clean download; 63 gates; fan-out 3.07× | the week's run history showed night 1's "dropped" run was late; header vs lines found 0 of 21,785 synthetic claims add up |
 
 Where things are: decisions → `DECISIONS.md` (CP-DEC 001–021) · grain → `docs/grain.md` · upstream deviations → `docs/schema-drift-log.md` ·
 reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · the case study → `docs/CASE-STUDY.md` · how to query → `docs/QUERY.md`.
@@ -720,8 +720,8 @@ reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis
 - **The local Synthea test couldn't run:** Docker Desktop was off (exit 127), and the failed attempt cleared the
   local Synthea output. It's regenerable, so verification moved to the GitHub runner.
 - **The private study guide went public by mistake.** A `git add -A` swept in `docs/EXPLAINER.md` and `.pdf`, the
-  owner-only study guide. They were untracked and gitignored in the next commit; they remain in history at
-  `343a2a0` (a history rewrite is Trevor's call).
+  owner-only study guide. They were untracked and gitignored in the next commit, and on 2026-10-07, at Trevor's
+  request, removed from history (see that day's entry).
 - **The watchdog's green-path test first failed with a GitHub 403.** The gh CLI's active account had changed to a
   second login without admin rights. It was re-run with the owner's token for that one command; the global login was
   left as Trevor set it.
@@ -804,6 +804,21 @@ release"). A1, A2 and A4 belong to other repos and were not touched here.
   verification (tested with a flipped byte).
 - **A made-up example NPI in the grain doc,** caught before commit. Replaced with a Northwestern NPI disclosed in
   the price file, and the zero-length-version example with the real NPI (`1801771704`) from the drift log.
+
+### History rewrite (same day)
+- At Trevor's request, the study guide committed by mistake on 2026-09-30 was removed from git history. With
+  `git filter-branch --index-filter 'git rm --cached …'`, the six commits from `343a2a0` on were rewritten (the trees
+  are otherwise identical; the final tree is byte-for-byte unchanged), and `main` was force-pushed.
+  - Old → new: `343a2a0`→`295dad5`, `6017086`→`94be49d`, `d75c3d5`→`3a40249`, `5204559`→`e1bf4cb`,
+    `8be7e5c`→`0e55b4f`. The index above cites the new hashes.
+  - **Three release tags pointed into the rewritten range** (`data-2026-09-30-78bc6a4f`, `data-2026-10-05-837b70ec`,
+    `data-2026-10-07-67efd3d2`). Left alone, they would have kept the old commits, and the files, reachable, so each
+    was moved to its rewritten twin. The release assets are attached to the release, not the commit, so nothing a
+    reader downloads changed.
+  - **What a rewrite can't do:** GitHub may still serve an orphaned commit by its full SHA until it garbage-collects,
+    and any existing clone keeps the old history. Fully purging cached views takes a GitHub Support request.
+- **Learning:** a mistaken commit is cheapest to fix before anything points at it. Here three releases had been
+  tagged on top of it within a week.
 
 ### Open / next
 - A1 (Payment-Integrity SQL port), A2 (Open311 fiscal year) and A4 (MCP Suite relational staging) live in their own
