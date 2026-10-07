@@ -20,7 +20,7 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 7 · the analysis | `b9d46f3` | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
 | 8 · case study | `100fd91` | `docs/CASE-STUDY.md`, with the drift log (21 entries) as its spine; every number checked against its source | two case-study claims were stronger than their evidence; tightened before shipping |
 | night 1 · unattended | `295dad5` | watchdog proven both ways; release rebuilt with pinned Synthea end date (`78bc6a4f`) | the first scheduled run looked dropped (it was 5h32m late — corrected 2026-10-07), and a catch-up run cut a spurious release (Synthea's end date = today) |
-| A3 · drillable release | `e1bf4cb` · `0e55b4f` | `data-2026-10-07-67efd3d2`: 15 files + check values, verified from a clean download; 63 gates; fan-out 3.07× | the week's run history showed night 1's "dropped" run was late; header vs lines found 0 of 21,785 synthetic claims add up |
+| A3 · drillable release | `e1bf4cb` · `0e55b4f` | `data-2026-10-07-67efd3d2`: 15 files + check values, verified from a clean download and reproduced on a 2nd machine; 64 gates; fan-out 3.07× | the week's run history showed night 1's "dropped" run was late; header vs lines found 0 of 21,785 synthetic claims add up |
 
 Where things are: decisions → `DECISIONS.md` (CP-DEC 001–021) · grain → `docs/grain.md` · upstream deviations → `docs/schema-drift-log.md` ·
 reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · the case study → `docs/CASE-STUDY.md` · how to query → `docs/QUERY.md`.
@@ -756,7 +756,7 @@ release"). A1, A2 and A4 belong to other repos and were not touched here.
   - `clear-pricer verify-release`, run by `pipeline.yml` after every release step;
   - two header-vs-lines gates and a history no-overlap gate;
   - `rpt_fhir_claim_totals`;
-  - 28 new tests, including mutation tests for every new gate.
+  - 32 new tests (124 total), including mutation tests for every new gate.
 - **First hosted release with A3:** `data-2026-10-07-67efd3d2` (fingerprint `67efd3d2f5b0…`; 15 files + check values).
   Run 37634262009 (43 min), every step green; `verify-release` passed from a clean download on the runner, and again
   from this workstation (15 files hashed, check values match, 15 s). The history: 9,884,252 versions over 9,839,369
@@ -805,6 +805,25 @@ release"). A1, A2 and A4 belong to other repos and were not touched here.
 - **A made-up example NPI in the grain doc,** caught before commit. Replaced with a Northwestern NPI disclosed in
   the price file, and the zero-length-version example with the real NPI (`1801771704`) from the drift log.
 
+### Docker back: the stale figure, and a second machine (same day)
+- Docker started, so the local warehouse was brought to the release's inputs: the new NPPES weekly applied (43,027
+  rows: 13,399 inserted, 14,798 updated, 766 deactivated), Synthea regenerated (239,818 resources, same as the
+  runner), and 100/100 build steps green.
+- **The local export didn't reproduce the release at first:** fingerprint `1ed029bc…` vs `67efd3d2…`. Inputs and
+  every check value were equal; 14 of 15 files, including the 9.88M-row history, were byte-identical. The one
+  difference was `rpt_nppes_file_log`: `seq` 1,2,3,4,**9** locally vs 1–5 on the runner. The workstation's raw
+  ledger still counts the M3 re-apply proof runs (seq 5–8). CP-DEC 014 kept those rows out of the release, but the
+  counter's gaps leaked through, and A3 had just made `seq` that table's grain key.
+- **Fix:** `seq` is renumbered 1..n over the published rows, plus a new gate (`assert_nppes_file_log_seq_dense`; 64
+  tests now). The runner's ledger was already 1..5, so its bytes don't change. After the fix the workstation export
+  reproduced **`67efd3d2f5b0b88f…` exactly**: the A3 release, history included, is byte-identical on Linux and
+  Windows.
+- `clear-pricer report` regenerated `docs/results/`. `fhir-mapping.md` had been stale since 2026-09-30: it still
+  showed 240,237 resources and Synthea args *without* `-e`. The cited percentages hold (EOB 5.3% mapped; 855 of
+  69,451 claim lines, 1.2%, share a code system with the price files).
+- **Learning:** a key has to mean the same thing on every machine. A counter is an identity *on one machine*;
+  publishing it, let alone keying on it, needs it to be derived from the data.
+
 ### History rewrite (same day)
 - At Trevor's request, the study guide committed by mistake on 2026-09-30 was removed from git history. With
   `git filter-branch --index-filter 'git rm --cached …'`, the six commits from the 2026-09-30 Synthea end-date pin on
@@ -825,9 +844,8 @@ release"). A1, A2 and A4 belong to other repos and were not touched here.
 - A1 (Payment-Integrity SQL port), A2 (Open311 fiscal year) and A4 (MCP Suite relational staging) live in their own
   repos.
 - **A stale figure, found while filling in today's numbers:** README, case study and `docs/results/fhir-mapping.md`
-  still quoted the 2026-09-29 synthetic population (240,237 resources). Since the end-date pin it's 239,818. README
-  and case study now quote the release; `fhir-mapping.md` is regenerated by `clear-pricer report` from a local
-  warehouse, which needs Synthea, which needs Docker Desktop running here (it's off). Open until then.
+  still quoted the 2026-09-29 synthetic population (240,237 resources). Since the end-date pin it's 239,818.
+  Regenerated the same day once Docker was running (below).
 - The NM file is re-downloaded on every hosted run: 5,019,534,101 bytes in 34 min of a 43-min run (2026-10-07 02:41),
   because landed files aren't cached between runs;
   an ETag check against the last landed manifest could skip it. Not urgent: an unchanged run publishes nothing.

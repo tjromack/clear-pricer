@@ -30,6 +30,7 @@
 | NPPES_Data_Dissemination_September_2026_V2.zip | full | 2026-09-13 | applied |
 | NPPES_Data_Dissemination_091426_092026_Weekly_V2.zip | weekly | 2026-09-20 | applied |
 | NPPES_Data_Dissemination_092126_092726_Weekly_V2.zip | weekly | 2026-09-27 | applied |
+| NPPES_Data_Dissemination_092826_100426_Weekly_V2.zip | weekly | 2026-10-04 | applied |
 
 ## Direction 1 — disclosed NPIs resolved against NPPES
 

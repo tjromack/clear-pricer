@@ -121,7 +121,8 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] pin Synthea's end date so output is independent of the day it runs (CP-DEC 018)
 - [x] confirm the first *scheduled* run fires and reproduces fingerprint `78bc6a4f` with no new release (it did;
   the next release came from a real NPPES weekly on 2026-10-05)
-- [ ] regenerate `docs/results/fhir-mapping.md` for the pinned-end-date population (it still shows the 2026-09-29
-  population: 240,237 resources; the current release has 239,818). Needs Synthea locally, i.e. Docker Desktop running
+- [x] regenerate `docs/results/fhir-mapping.md` for the pinned-end-date population (239,818 resources; 2026-10-07)
+- [x] reproduce the A3 release on a second machine: workstation fingerprint = runner `67efd3d2` after the file-ledger
+  `seq` fix (gated gap-free)
 - [ ] skip the 5 GB NM re-download on hosted runs when the ETag is unchanged (34 of 43 min per run)
 - [ ] alerting beyond GitHub's failed-run email (e.g. a webhook), if one inbox proves too easy to miss

@@ -24,7 +24,7 @@ clear-pricer verify-release --tag latest     # hashes, grain, fan-out, checksums
 | `rpt_npi_completeness` | hospital × NPPES hospital NPI near it (tiers 1–4) | `hospital_id`, `npi` | 78 |
 | `rpt_source_conformance` | hospital × kind of deviation × column | `hospital_id`, `kind`, `column` | 9 |
 | `files` | hospital (its current source file) | `hospital_id` | 3 |
-| `rpt_nppes_file_log` | NPPES file the CDC applied or refused, in order | `seq` | 5 |
+| `rpt_nppes_file_log` | NPPES file the CDC applied or refused, in order (`seq` 1..n, gated gap-free) | `seq` | 5 |
 | `dim_modifiers` | modifier rule a hospital published | `hospital_id`, `code`, `setting`, `payer_name`, `plan_name` | 37 |
 | `rpt_fhir_summary` | FHIR resource type | `resource_type` | 24 |
 | `rpt_fhir_mapping` | FHIR resource type × leaf path | `resource_type`, `path` | 639 |

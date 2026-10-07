@@ -33,7 +33,7 @@ flowchart LR
   L --> P[Streaming parsers<br/>record, never drop]
   P --> S[Staging Parquet<br/>+ drift log + quarantine]
   B -.->|SCD2 CDC| H[(NPPES history)]
-  S --> G{dbt build<br/>63 gates}
+  S --> G{dbt build<br/>64 gates}
   H --> G
   G -->|any gate fails: run is red,<br/>nothing publishes| X[stop]
   G --> W[(DuckDB warehouse)]
@@ -54,8 +54,8 @@ Postgres the served one, and every publish is checked for parity between them.
 | Charge rows published | **7,371,416** (3 hospitals) |
 | Providers under change-data-capture | **9,839,369** NPIs, 9,884,252 versions (release `data-2026-10-07-67efd3d2`) |
 | Synthetic FHIR resources parsed | **239,818** across 24 types (same release); every reference resolves (gated) |
-| Quality gates | **63** dbt tests, every one able to fail the run |
-| Tests | **120** (unit, end-to-end, and mutation tests that plant defects for each gate), green on a fresh runner |
+| Quality gates | **64** dbt tests, every one able to fail the run |
+| Tests | **124** (unit, end-to-end, and mutation tests that plant defects for each gate), green on a fresh runner |
 | Release | 15 Parquet files incl. the NPPES change history, plus `check_values.json`; the 13-file release was **byte-identical** built on a Linux runner and a Windows workstation |
 
 ## The spine: what the sources actually contained
@@ -187,11 +187,19 @@ The [build log](BUILD-LOG.md) records each break as it happened. The ones that c
   own failure; and before calling a run missing, know how late the platform normally runs.**
 - **A gate count that counted the wrong thing.** The README said "80 dbt checks". 80 was the dbt build's pass count,
   which counts models *and* tests. The project had 45 tests. Counting them for A3 caught it, and the docs now quote
-  tests only (63).
+  tests only (64).
+- **A committed figure that went stale.** After Synthea's end date was pinned, `docs/results/fhir-mapping.md` kept
+  describing the old population (240,237 resources, generated without `-e`) for a week. The pipeline was right, but
+  the committed copy of its output wasn't regenerated. It is now (239,818), and "regenerates from pinned inputs" is
+  only true if someone regenerates it when the inputs change.
+- **A machine-local counter in a published table.** The local rebuild of the A3 release differed from the hosted one
+  in a single file: the NPPES file ledger numbered its rows 1,2,3,4,**9** on the workstation and 1–5 on the runner.
+  The raw counter also counted re-apply proof runs, which aren't published. It's now renumbered over the published
+  rows and gated gap-free, and the two builds then matched byte for byte.
 
 ## How it's verified
 
-- **Gates in the run, not beside it.** `dbt build` runs 63 tests that fail the run. A deliberately broken input
+- **Gates in the run, not beside it.** `dbt build` runs 64 tests that fail the run. A deliberately broken input
   turned the Airflow run red, publish never ran, and Postgres kept the previous build (run
   `broken_input_proof_1`). Three broken fixtures fail the run in CI on every push; each was verified to trip its
   intended gate.
@@ -200,8 +208,9 @@ The [build log](BUILD-LOG.md) records each break as it happened. The ones that c
 - **Parity.** Every publish checks counts, distinct keys and money sums between DuckDB and the served Postgres, and
   a mismatch fails the task.
 - **Reproducibility across machines.** A GitHub runner and a workstation independently built release fingerprint
-  `27a340045c24de0f…`. Every committed figure (NPI reconciliation, FHIR mapping, the analysis) regenerates
-  byte-identically from a pinned release with one command.
+  `67efd3d2f5b0b88f…`: 15 files, including the 9.88M-row provider history, byte-identical (and `27a340045c24de0f…`,
+  13 files, on 2026-09-29). Every committed figure (NPI reconciliation, FHIR mapping, the analysis) regenerates from
+  pinned inputs with one command.
 - **A stranger's path.** A fresh container with no clone and no credentials queried the release over HTTPS,
   including the full 7.37M-row fact. CI does the clean-clone equivalent on every push.
 - **Liveness, not just correctness.** A freshness watchdog checks that the pipeline has *succeeded* within 26 hours,

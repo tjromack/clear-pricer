@@ -5,13 +5,13 @@
 
 ## Population (pinned)
 
-- Synthea `v4.0.0` (jar sha256 `ed43c20ad40ba5c3…`), args: `-s 20260929 -cs 20260929 -r 20260901 -p 200 --exporter.baseDirectory=/work/output --exporter.fhir.export=true --exporter.hospital.fhir.export=true --exporter.practitioner.fhir.export=true --exporter.csv.export=false --exporter.text.export=false Illinois Chicago`
-- 227 bundles, 240,237 resources
+- Synthea `v4.0.0` (jar sha256 `ed43c20ad40ba5c3…`), args: `-s 20260929 -cs 20260929 -r 20260901 -e 20260901 -p 200 --exporter.baseDirectory=/work/output --exporter.fhir.export=true --exporter.hospital.fhir.export=true --exporter.practitioner.fhir.export=true --exporter.csv.export=false --exporter.text.export=false Illinois Chicago`
+- 227 bundles, 239,818 resources
 
 ## Gates
 
 - **Synthetic by construction:** 225 of 225 patients carry every Synthea marker (identifier system, 999-range SSN, digit-suffixed names).
-- **Structural issues:** 0 across 240,237 resources (R4 1..1 elements used, coding system+code, date formats). Every reference resolves (bundle URNs, conditional identifiers, contained).
+- **Structural issues:** 0 across 239,818 resources (R4 1..1 elements used, coding system+code, date formats). Every reference resolves (bundle URNs, conditional identifiers, contained).
 
 ## Coverage by resource type
 
@@ -19,27 +19,27 @@
 
 | resource type | resources | modelled | leaf paths | mapped paths | mapped value share | structural issues |
 |---|---|---|---|---|---|---|
-| Observation | 90,759 | yes | 37 | 17 | 61.1% | 0 |
-| Procedure | 25,111 | yes | 20 | 9 | 61.5% | 0 |
-| DiagnosticReport | 22,791 | no | 21 | 0 | 0.0% | 0 |
-| Claim | 21,803 | yes | 42 | 17 | 54.0% | 0 |
-| ExplanationOfBenefit | 21,803 | yes | 72 | 8 | 5.3% | 0 |
-| DocumentReference | 12,916 | no | 26 | 0 | 0.0% | 0 |
-| Encounter | 12,916 | yes | 36 | 15 | 45.0% | 0 |
-| MedicationRequest | 8,887 | yes | 39 | 10 | 39.8% | 0 |
-| Condition | 6,899 | yes | 19 | 10 | 53.4% | 0 |
-| Immunization | 3,356 | no | 14 | 0 | 0.0% | 0 |
-| Medication | 3,285 | no | 8 | 0 | 0.0% | 0 |
-| MedicationAdministration | 3,285 | no | 17 | 0 | 0.0% | 0 |
-| SupplyDelivery | 2,166 | no | 13 | 0 | 0.0% | 0 |
-| CarePlan | 729 | no | 28 | 0 | 0.0% | 0 |
-| CareTeam | 729 | no | 20 | 0 | 0.0% | 0 |
+| Observation | 90,494 | yes | 37 | 17 | 61.1% | 0 |
+| Procedure | 25,076 | yes | 20 | 9 | 61.5% | 0 |
+| DiagnosticReport | 22,737 | no | 21 | 0 | 0.0% | 0 |
+| Claim | 21,785 | yes | 42 | 17 | 54.0% | 0 |
+| ExplanationOfBenefit | 21,785 | yes | 72 | 8 | 5.3% | 0 |
+| DocumentReference | 12,908 | no | 26 | 0 | 0.0% | 0 |
+| Encounter | 12,908 | yes | 36 | 15 | 45.0% | 0 |
+| MedicationRequest | 8,877 | yes | 39 | 10 | 39.8% | 0 |
+| Condition | 6,880 | yes | 19 | 10 | 53.4% | 0 |
+| Immunization | 3,353 | no | 14 | 0 | 0.0% | 0 |
+| Medication | 3,299 | no | 8 | 0 | 0.0% | 0 |
+| MedicationAdministration | 3,299 | no | 17 | 0 | 0.0% | 0 |
+| SupplyDelivery | 2,158 | no | 13 | 0 | 0.0% | 0 |
+| CarePlan | 728 | no | 28 | 0 | 0.0% | 0 |
+| CareTeam | 728 | no | 20 | 0 | 0.0% | 0 |
 | Device | 370 | no | 18 | 0 | 0.0% | 0 |
 | Location | 352 | yes | 24 | 5 | 26.3% | 0 |
 | Organization | 351 | yes | 20 | 11 | 41.8% | 0 |
 | Practitioner | 351 | yes | 22 | 7 | 31.8% | 0 |
 | PractitionerRole | 351 | no | 25 | 0 | 0.0% | 0 |
-| ImagingStudy | 334 | no | 32 | 0 | 0.0% | 0 |
+| ImagingStudy | 335 | no | 32 | 0 | 0.0% | 0 |
 | AllergyIntolerance | 243 | no | 21 | 0 | 0.0% | 0 |
 | Patient | 225 | yes | 52 | 15 | 38.8% | 0 |
 | Provenance | 225 | no | 13 | 0 | 0.0% | 0 |
@@ -48,39 +48,39 @@
 
 | resource type | path | occurrences |
 |---|---|---|
-| Claim | `item[].productOrService.text` | 69,580 |
-| Claim | `item[].net.currency` | 40,878 |
-| Claim | `item[].procedureSequence[]` | 25,111 |
-| Condition | `category[].coding[].code` | 6,899 |
-| Condition | `category[].coding[].display` | 6,899 |
-| Condition | `category[].coding[].system` | 6,899 |
-| Encounter | `class.system` | 12,916 |
-| Encounter | `identifier[].system` | 12,916 |
-| Encounter | `identifier[].use` | 12,916 |
-| ExplanationOfBenefit | `item[].adjudication[].category.coding[].code` | 245,268 |
-| ExplanationOfBenefit | `item[].adjudication[].category.coding[].display` | 245,268 |
-| ExplanationOfBenefit | `item[].adjudication[].category.coding[].system` | 245,268 |
+| Claim | `item[].productOrService.text` | 69,451 |
+| Claim | `item[].net.currency` | 40,786 |
+| Claim | `item[].procedureSequence[]` | 25,076 |
+| Condition | `category[].coding[].code` | 6,880 |
+| Condition | `category[].coding[].display` | 6,880 |
+| Condition | `category[].coding[].system` | 6,880 |
+| Encounter | `class.system` | 12,908 |
+| Encounter | `identifier[].system` | 12,908 |
+| Encounter | `identifier[].use` | 12,908 |
+| ExplanationOfBenefit | `item[].adjudication[].category.coding[].code` | 244,716 |
+| ExplanationOfBenefit | `item[].adjudication[].category.coding[].display` | 244,716 |
+| ExplanationOfBenefit | `item[].adjudication[].category.coding[].system` | 244,716 |
 | Location | `status` | 352 |
 | Location | `address.city` | 351 |
 | Location | `address.country` | 351 |
-| MedicationRequest | `category[].coding[].code` | 8,887 |
-| MedicationRequest | `category[].coding[].display` | 8,887 |
-| MedicationRequest | `category[].coding[].system` | 8,887 |
-| Observation | `meta.profile[]` | 138,559 |
-| Observation | `code.text` | 90,759 |
-| Observation | `issued` | 90,759 |
+| MedicationRequest | `category[].coding[].code` | 8,877 |
+| MedicationRequest | `category[].coding[].display` | 8,877 |
+| MedicationRequest | `category[].coding[].system` | 8,877 |
+| Observation | `meta.profile[]` | 138,048 |
+| Observation | `code.text` | 90,494 |
+| Observation | `issued` | 90,494 |
 | Organization | `extension[].url` | 1,457 |
 | Organization | `extension[].valueInteger` | 1,457 |
 | Organization | `active` | 351 |
-| Patient | `identifier[].type.coding[].code` | 786 |
-| Patient | `identifier[].type.coding[].display` | 786 |
-| Patient | `identifier[].type.coding[].system` | 786 |
+| Patient | `identifier[].type.coding[].code` | 785 |
+| Patient | `identifier[].type.coding[].display` | 785 |
+| Patient | `identifier[].type.coding[].system` | 785 |
 | Practitioner | `active` | 351 |
 | Practitioner | `address[].country` | 351 |
 | Practitioner | `address[].line[]` | 351 |
-| Procedure | `code.text` | 25,111 |
-| Procedure | `location.display` | 25,111 |
-| Procedure | `location.reference` | 25,111 |
+| Procedure | `code.text` | 25,076 |
+| Procedure | `location.display` | 25,076 |
+| Procedure | `location.reference` | 25,076 |
 
 ## Code bridge: synthetic claims vs real price files
 
@@ -88,9 +88,9 @@ A synthetic claim line can be priced against a real hospital file only where bot
 
 | claim-line code system | lines | distinct codes | lines with a price-file code | codes with a price-file code | hospitals |
 |---|---|---|---|---|---|
-| http://snomed.info/sct | 45,368 | 531 | 0 | 0 | 0 |
-| http://loinc.org | 9,875 | 32 | 0 | 0 | 0 |
-| http://www.nlm.nih.gov/research/umls/rxnorm | 8,887 | 163 | 0 | 0 | 0 |
-| http://hl7.org/fhir/sid/cvx | 3,356 | 21 | 0 | 0 | 0 |
-| http://www.ada.org/cdt | 1,942 | 168 | 862 | 36 | 2 |
+| http://snomed.info/sct | 45,308 | 530 | 0 | 0 | 0 |
+| http://loinc.org | 9,829 | 32 | 0 | 0 | 0 |
+| http://www.nlm.nih.gov/research/umls/rxnorm | 8,877 | 163 | 0 | 0 | 0 |
+| http://hl7.org/fhir/sid/cvx | 3,353 | 21 | 0 | 0 | 0 |
+| http://www.ada.org/cdt | 1,932 | 168 | 855 | 36 | 2 |
 | http://hl7.org/fhir/sid/icd-10 | 152 | 74 | 0 | 0 | 0 |

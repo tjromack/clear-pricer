@@ -119,11 +119,12 @@ gated build, and a parity check proves it matches DuckDB. To watch the gate fire
 
 ## How it's verified
 
-Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned inputs):
+Measured, not asserted (as of 2026-10-07; every figure regenerates from pinned inputs):
 - **Reproducible across machines:** a GitHub runner (Linux) and a workstation (Windows) independently built the same
-  release, fingerprint `27a340045c24de0f…`, with all 13 Parquet files byte-identical. A fresh container with no clone
+  release, fingerprint `67efd3d2f5b0b88f…`, with all 15 Parquet files byte-identical, including the 9.88M-row provider
+  history (first shown on 2026-09-29 for the 13-file release `27a340045c24de0f…`). A fresh container with no clone
   and no credentials queried it over HTTPS, including the full 7.37M-row fact.
-- **Quality gates that fail the run** (not warn): 63 dbt tests, covering row reconciliation, keys, enums, CMS
+- **Quality gates that fail the run** (not warn): 64 dbt tests, covering row reconciliation, keys, enums, CMS
   required columns, the CDC history's invariants, the reconciliation's own rules, a proved grain key on every release
   table, and header-vs-lines checks in both directions. A deliberately broken input turns
   the Airflow run red, and publish never runs (run `broken_input_proof_1`).

@@ -160,6 +160,16 @@ def test_claim_gate_fires(claims, mutation):
     assert _rows(claims, "assert_fhir_claims_match_eobs") > 0
 
 
+@pytest.mark.parametrize("seqs,fires", [((), False), ((1, 2, 3), False), ((1, 2, 3, 4, 9), True), ((2, 3), True)])
+def test_file_log_seq_gate(seqs, fires):
+    """The published ledger is numbered 1..n; a raw counter with gaps (machine-local proof runs) must fail."""
+    con = duckdb.connect()
+    con.sql("CREATE TABLE rpt_nppes_file_log (seq INTEGER)")
+    for s in seqs:
+        con.execute("INSERT INTO rpt_nppes_file_log VALUES (?)", [s])
+    assert (_rows(con, "assert_nppes_file_log_seq_dense") > 0) == fires
+
+
 # ------------------------------------------------------------------------------------------ export + verify-release
 
 _MINI = {
