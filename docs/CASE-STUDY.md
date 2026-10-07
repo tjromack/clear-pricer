@@ -33,11 +33,11 @@ flowchart LR
   L --> P[Streaming parsers<br/>record, never drop]
   P --> S[Staging Parquet<br/>+ drift log + quarantine]
   B -.->|SCD2 CDC| H[(NPPES history)]
-  S --> G{dbt build<br/>80 gates}
+  S --> G{dbt build<br/>63 gates}
   H --> G
   G -->|any gate fails: run is red,<br/>nothing publishes| X[stop]
   G --> W[(DuckDB warehouse)]
-  W --> R[Parquet release<br/>byte-reproducible]
+  W --> R[Parquet release<br/>byte-reproducible,<br/>self-verifying]
   W --> PG[(Postgres / Supabase<br/>served set, read-only)]
   R --> Q[Anyone: DuckDB over HTTPS]
   R --> API[FastAPI]
@@ -46,21 +46,21 @@ flowchart LR
 
 The same CLI steps run under **Airflow 3** (local, Docker) and a **GitHub Actions** schedule (hosted, two daily
 slots, watched by a freshness check; see below):
-`stage ×3 + nppes-sync + fhir-stage → build (gates) → publish → export → release`. DuckDB is the local engine and
+`stage ×3 + nppes-sync + fhir-stage → build (gates) → publish → export → release → verify-release`. DuckDB is the local engine and
 Postgres the served one, and every publish is checked for parity between them.
 
 | | |
 |---|---|
 | Charge rows published | **7,371,416** (3 hospitals) |
-| Providers under change-data-capture | **9,825,970** NPIs, 9,855,257 versions |
-| Synthetic FHIR resources parsed | **240,237** across 24 types; 1,200,521 of 1,200,521 references resolve |
-| Quality gates | **80**, every one able to fail the run |
-| Tests | **92** (unit + end-to-end gate tests), green on a fresh runner |
-| Release | 13 Parquet files, **byte-identical** when built on a Linux runner and a Windows workstation |
+| Providers under change-data-capture | **9,839,369** NPIs, 9,884,252 versions (release `data-2026-10-07-67efd3d2`) |
+| Synthetic FHIR resources parsed | **239,818** across 24 types (same release); every reference resolves (gated) |
+| Quality gates | **63** dbt tests, every one able to fail the run |
+| Tests | **120** (unit, end-to-end, and mutation tests that plant defects for each gate), green on a fresh runner |
+| Release | 15 Parquet files incl. the NPPES change history, plus `check_values.json`; the 13-file release was **byte-identical** built on a Linux runner and a Windows workstation |
 
 ## The spine: what the sources actually contained
 
-The [schema-drift log](schema-drift-log.md) was written as each deviation was found, 22 entries. It's the most
+The [schema-drift log](schema-drift-log.md) was written as each deviation was found, 23 entries. It's the most
 useful artifact the project produced, and the rest of the design follows from it. The design rule was **record,
 never drop**: every column, value or row the parsers couldn't map is kept and counted in a published conformance
 table, `rpt_source_conformance`.
@@ -104,10 +104,15 @@ table, `rpt_source_conformance`.
   bundles, and `#contained` references. A resolver that knew only URNs reported 43,606 false "dangling" references.
 - **Multi-threaded Synthea isn't byte-deterministic.** Two identical 16-core runs differed in one patient. Found by
   comparing a hosted release with a local one; generation is now pinned to one CPU.
+- **Claim headers don't match their lines.** A header-vs-lines check over the synthetic claims found that Synthea's
+  `Claim.total` never equals the sum of its line items (0 of 21,785 claims). Pharmacy lines carry no amount at all, and priced claims miss
+  in both directions. Every EOB total matches its claim exactly, so the parser is reading the right fields. This is
+  published as a measured finding (`rpt_fhir_claim_totals`), not gated: a gate on it would fail every run on a pinned
+  input.
 
 ## Decisions that shaped it
 
-All 18 are in [DECISIONS.md](../DECISIONS.md), each with the rejected alternative. The ones that mattered most:
+All 21 are in [DECISIONS.md](../DECISIONS.md), each with the rejected alternative. The ones that mattered most:
 
 1. **Integrity gates fail; source findings are published** (CP-DEC 007). A missing required column, lost rows,
    quarantine above 1%, a broken reference or a non-synthetic patient turns the run red. A hospital's own spec
@@ -125,6 +130,11 @@ All 18 are in [DECISIONS.md](../DECISIONS.md), each with the rejected alternativ
    outputs; a release is cut exactly when the published data would change.
 6. **Three read paths, sized to the job** (CP-DEC 013). Parquet on GitHub Releases for the full detail, Supabase's
    free tier for the small served set (row-level security, read-only), and FastAPI over the Parquet.
+7. **The release proves its own grain** (CP-DEC 019–021). Every release table has a key gated unique and documented
+   in [grain.md](grain.md). Each release ships `check_values.json` (rows, distinct keys, the charges-to-codes fan-out,
+   integer-cent checksums), computed from the warehouse and from the written Parquet, which must agree.
+   `clear-pricer verify-release` recomputes it from a clean download. The NPPES change history ships too, because CMS
+   publishes snapshots, not history.
 
 ## Results
 
@@ -164,17 +174,24 @@ The [build log](BUILD-LOG.md) records each break as it happened. The ones that c
 - **A plausible wrong answer.** The first cut of the analysis said Rush was the most expensive hospital on 398 of
   534 codes. Asking what kind of dollar each "negotiated rate" was exposed list-price Medicare Advantage rates, case
   packages and unit artifacts. The analysis now opens with a table of what each dollar actually is.
-- **The first night: a schedule that never fired.** The first unattended night, the scheduled 11:17 UTC run simply
-  didn't happen. GitHub treats scheduled runs as best-effort and can drop them under load, and nothing noticed. The
-  fix monitors the outcome, not the trigger. There are now two daily slots, 12 hours apart, and a separate freshness
-  watchdog. If the last successful run is more than 26 hours old, it re-enables the workflow, dispatches a catch-up
-  run and fails on purpose so the owner is alerted. It was proven by forcing it stale: it dispatched the catch-up run
-  and raised the alert. No data was lost that day, because no upstream file had changed. **A job that doesn't start
-  can't report its own failure.**
+- **The first night: a late run, read as a dropped one.** The morning after going live, there was no sign of the
+  11:17 UTC run 4h43m after it was due, and it was declared dropped. GitHub documents scheduled runs as best-effort:
+  they can be delayed or dropped. The response monitors the outcome, not the trigger:
+  - two daily slots, 12 hours apart;
+  - a separate freshness watchdog. If the last *successful* run is more than 26 hours old, it re-enables the
+    workflow, dispatches a catch-up run and fails on purpose so the owner is alerted.
+
+  It was proven by forcing it stale. A week of run history then corrected the diagnosis: that run fired at 16:49, 5h32m
+  late, and every one of the next 20 scheduled events fired, late by 2.5–8.3 hours. Nothing has been dropped so far.
+  The watchdog's 26-hour threshold is what makes that lateness harmless. **A job that doesn't start can't report its
+  own failure; and before calling a run missing, know how late the platform normally runs.**
+- **A gate count that counted the wrong thing.** The README said "80 dbt checks". 80 was the dbt build's pass count,
+  which counts models *and* tests. The project had 45 tests. Counting them for A3 caught it, and the docs now quote
+  tests only (63).
 
 ## How it's verified
 
-- **Gates in the run, not beside it.** `dbt build` runs 80 tests that fail the run. A deliberately broken input
+- **Gates in the run, not beside it.** `dbt build` runs 63 tests that fail the run. A deliberately broken input
   turned the Airflow run red, publish never ran, and Postgres kept the previous build (run
   `broken_input_proof_1`). Three broken fixtures fail the run in CI on every push; each was verified to trip its
   intended gate.
@@ -188,7 +205,15 @@ The [build log](BUILD-LOG.md) records each break as it happened. The ones that c
 - **A stranger's path.** A fresh container with no clone and no credentials queried the release over HTTPS,
   including the full 7.37M-row fact. CI does the clean-clone equivalent on every push.
 - **Liveness, not just correctness.** A freshness watchdog checks that the pipeline has *succeeded* within 26 hours,
-  heals a missed day, and alerts (CP-DEC 017).
+  heals a missed day, and alerts (CP-DEC 017). In its first week, 21 of 21 scheduled events fired and every pipeline
+  run passed.
+- **Grain, proved.** Every release table has a key that is a dbt gate ([grain.md](grain.md)). Two header-vs-lines
+  gates run in both directions with a half-cent money tolerance: the price summary is re-derived from its charge
+  lines, and claims are checked against their lines and EOBs. Each new gate is tested against planted defects (an
+  overcount, an orphan line, a cent off, an overlapping provider version) and must catch every one.
+- **A release that verifies itself.** `check_values.json` is computed from the warehouse and from the written Parquet
+  at export (they must agree), then recomputed from a clean download after every release (`verify-release`). It
+  catches a flipped byte, a file rewritten together with its manifest hash, and an edited check value (tested).
 
 ## Limits
 
@@ -204,8 +229,10 @@ The [build log](BUILD-LOG.md) records each break as it happened. The ones that c
   detail).
 - **Hosting:** Supabase free tier (a 500 MB database, and projects pause without activity; still active after the
   first night). FastAPI isn't deployed to a public host.
-- **Scheduling is best-effort.** All three schedules (two pipeline slots and the watchdog) run on GitHub Actions, so
-  a platform-wide scheduling outage would defeat them together. A missed day is healed and alerted, not prevented.
+- **Scheduling is late, and best-effort.** GitHub fired every scheduled event in the first week, but 2.5–8.3 hours
+  after the cron time, so "daily at 11:17" means "some time that afternoon". All three schedules run on GitHub Actions,
+  so a platform-wide scheduling outage would defeat them together. A missed day is healed and alerted, not
+  prevented.
 
 ## Try it
 

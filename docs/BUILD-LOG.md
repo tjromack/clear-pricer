@@ -19,9 +19,10 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 6 · publish + serve | `ad54b89` | release fingerprint identical on GitHub runner and workstation; public | a DSN password leaked into a session (rotated; redaction added); Synthea not deterministic multi-threaded |
 | 7 · the analysis | `b9d46f3` | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
 | 8 · case study | `100fd91` | `docs/CASE-STUDY.md`, with the drift log (21 entries) as its spine; every number checked against its source | two case-study claims were stronger than their evidence; tightened before shipping |
-| night 1 · unattended | `343a2a0` | watchdog proven both ways; release rebuilt with pinned Synthea end date (`78bc6a4f`) | the first scheduled run never fired, and a catch-up run cut a spurious release (Synthea's end date = today) |
+| night 1 · unattended | `343a2a0` | watchdog proven both ways; release rebuilt with pinned Synthea end date (`78bc6a4f`) | the first scheduled run looked dropped (it was 5h32m late — corrected 2026-10-07), and a catch-up run cut a spurious release (Synthea's end date = today) |
+| A3 · drillable release | ‹A3COMMIT› | `data-2026-10-07-67efd3d2`: 15 files + check values, verified from a clean download; 63 gates; fan-out 3.07× | the week's run history showed night 1's "dropped" run was late; header vs lines found 0 of 21,785 synthetic claims add up |
 
-Where things are: decisions → `DECISIONS.md` (CP-DEC 001–018) · upstream deviations → `docs/schema-drift-log.md` ·
+Where things are: decisions → `DECISIONS.md` (CP-DEC 001–021) · grain → `docs/grain.md` · upstream deviations → `docs/schema-drift-log.md` ·
 reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · the case study → `docs/CASE-STUDY.md` · how to query → `docs/QUERY.md`.
 
 ---
@@ -730,3 +731,88 @@ reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis
   release. That proves day-independence and the schedule together. If it's dropped, the 17:37 watchdog should catch
   it.
 - Watch a full week; check Supabase stays active; consider alerting beyond the failed-run email.
+
+---
+
+## 2026-10-07 — Week 1 unattended, and add-on A3: make the release drillable
+
+Source of the work: portfolio playbook v3, add-on A3 ("publish provider history, grain doc and check values in the
+release"). A1, A2 and A4 belong to other repos and were not touched here.
+
+### What happened
+- **A week unattended, read from the run history.** 21 of 21 scheduled events fired (14 pipeline, 7 watchdog), and
+  every pipeline run passed its gates. Every one was late: the 11:17 slot by 3h51m–8h19m, the 23:47 slot by
+  2h32m–3h33m, the watchdog by 2h31m–5h42m. The first scheduled run reproduced fingerprint `78bc6a4f` and cut no
+  release, which proved the Synthea end-date pin. The only release that week, `data-2026-10-05-837b70ec`, came
+  from a real upstream change: NPPES published weekly `092826_100426`, the CDC applied it, and in the release only
+  `rpt_nppes_file_log` changed (4 → 5 rows).
+- **That release motivated A3.** The weekly delta changed the provider history, but the history wasn't in the release,
+  so no one outside could see what changed.
+- **A3 built:**
+  - `dim_provider_history` (9,884,252 rows) in the release, 561 MB zstd, sorted by NPI;
+  - a generic dbt `grain` gate on all 15 release tables;
+  - `docs/grain.md`;
+  - `check_values.json` per release;
+  - `clear-pricer verify-release`, run by `pipeline.yml` after every release step;
+  - two header-vs-lines gates and a history no-overlap gate;
+  - `rpt_fhir_claim_totals`;
+  - 28 new tests, including mutation tests for every new gate.
+- **First hosted release with A3:** `data-2026-10-07-67efd3d2` (fingerprint `67efd3d2f5b0…`; 15 files + check values).
+  Run 37634262009 (43 min), every step green; `verify-release` passed from a clean download on the runner, and again
+  from this workstation (15 files hashed, check values match, 15 s). The history: 9,884,252 versions over 9,839,369
+  NPIs, max version 4, zero version pairs valid on one day.
+
+### Decisions (→ CP-DEC 019, 020, 021, and a correction to 017)
+- CP-DEC 019: the NPPES history ships in the release (Parquet only, not Supabase). This partly reverses CP-DEC 010:
+  CMS publishes snapshots, not history.
+- CP-DEC 020: a proved grain key per release table (Python contract = dbt gates = doc, enforced by a pytest), and
+  `check_values.json` computed from the warehouse, from the written Parquet, and from a clean download.
+- CP-DEC 021: header vs lines. Gate the joins the pipeline owns; publish what the source does.
+- CP-DEC 017 correction: night 1's run was late, not dropped.
+
+### Learnings
+- **Night 1's diagnosis was wrong.** The 11:17 run on 2026-09-30 fired at 16:49 UTC, 5h32m late. It was declared
+  "never fired" at 4h43m, about 50 minutes too early, and that claim went into the case study, the build log and
+  CP-DEC 017. The fixes still hold: the watchdog watches the outcome, and lateness is harmless under its 26 h
+  threshold (the longest gap between successes was 17h12m). **Before calling a scheduled run missing, know the
+  platform's normal latency;** a week of history is what supplied it.
+- **The gate count counted the wrong thing.** README and case study said "80 dbt checks". 80 was dbt build's PASS
+  count, which counts models and tests. There were 45 tests; there are now 63 (15 grain + 3 new + 45). Found by
+  counting with `dbt ls --resource-type test` to update the number.
+- **The fan-out trap is in the join, not where the playbook put it.**
+  - Charges → codes fans out 3.07× (7,371,416 → 22,647,893).
+  - `agg_code_prices.charge_rows` does *not* double-count: its sum equals the distinct charges covered, ratio 1.0,
+    because no charge carries two qualifying codes.
+  - The real trap is grain: 49,404 rows over 26,770 hospital-code pairs (1.85 per pair), and an `ALL` row in
+    `rpt_npi_reconciliation` that doubles any naive sum (16 disclosed NPIs instead of 8).
+
+  `check_values.json` now pins these numbers per release.
+- **Header vs lines found the generator disagreeing with itself.** On every synthetic claim, `Claim.total` ≠
+  sum(`item.net`) (0 of 21,785 match; pharmacy's 8,877 carry no priced line). EOB totals match claim totals on all of them, which suggests the parser is reading the
+  right fields. Gating it would fail every run on a pinned input, so it's published (`rpt_fhir_claim_totals`) and
+  logged (drift log entry 23).
+- **Verify the data, not only the bytes.** Hash checks prove a file is the one published. Recomputed check values
+  prove it still says what the docs say. The tamper test that rewrites a file *and* its manifest hash passes the hash
+  check and fails on `fct_standard_charges.rows`.
+
+### What broke (+ fix)
+- **A string escape turned into a newline.** A scripted edit wrote `"\n"` into `export.py` as a real line break
+  (SyntaxError). Fixed with Edit; noted in memory alongside the earlier heredoc gotcha.
+- **`DECIMAL` in a check value broke the JSON writer.** The mutation-test miniature used literal decimals where the
+  warehouse has DOUBLE. Check values now cast explicitly, so the type can't vary.
+- **A corrupted Parquet file crashed `verify-release` instead of failing it.** It is now reported as a failed
+  verification (tested with a flipped byte).
+- **A made-up example NPI in the grain doc,** caught before commit. Replaced with a Northwestern NPI disclosed in
+  the price file, and the zero-length-version example with the real NPI (`1801771704`) from the drift log.
+
+### Open / next
+- A1 (Payment-Integrity SQL port), A2 (Open311 fiscal year) and A4 (MCP Suite relational staging) live in their own
+  repos.
+- **A stale figure, found while filling in today's numbers:** README, case study and `docs/results/fhir-mapping.md`
+  still quoted the 2026-09-29 synthetic population (240,237 resources). Since the end-date pin it's 239,818. README
+  and case study now quote the release; `fhir-mapping.md` is regenerated by `clear-pricer report` from a local
+  warehouse, which needs Synthea, which needs Docker Desktop running here (it's off). Open until then.
+- The NM file is re-downloaded on every hosted run: 5,019,534,101 bytes in 34 min of a 43-min run (2026-10-07 02:41),
+  because landed files aren't cached between runs;
+  an ETag check against the last landed manifest could skip it. Not urgent: an unchanged run publishes nothing.
+- Supabase: still serving (REST 200 on 2026-10-07) under daily publishes.

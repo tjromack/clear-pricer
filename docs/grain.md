@@ -5,7 +5,7 @@ it is a dbt gate (`grain`, in the schema files), so a release with a duplicate k
 `check_values.json`, which ships with every release (CP-DEC 020), and `clear-pricer verify-release`, which
 recomputes it from a clean download.
 
-Figures quoted below come from release `‹TAG›` and its `check_values.json`. Each release carries its own; the
+Figures quoted below come from release `data-2026-10-07-67efd3d2` and its `check_values.json`. Each release carries its own; the
 structure described here does not change between releases.
 
 ```bash
@@ -14,7 +14,7 @@ clear-pricer verify-release --tag latest     # hashes, grain, fan-out, checksums
 
 ## Summary
 
-| File | One row per | Key | Rows (`‹TAG›`) |
+| File | One row per | Key | Rows (`data-2026-10-07-67efd3d2`) |
 |---|---|---|---:|
 | `fct_standard_charges` | source charge row (item × setting × payer/plan, as the hospital published it) | `charge_id` | 7,371,416 |
 | `dim_charge_codes` | billing code listed on an item, in source order | `item_id`, `code_seq` | 1,092,359 |
@@ -24,34 +24,34 @@ clear-pricer verify-release --tag latest     # hashes, grain, fan-out, checksums
 | `rpt_npi_completeness` | hospital × NPPES hospital NPI near it (tiers 1–4) | `hospital_id`, `npi` | 78 |
 | `rpt_source_conformance` | hospital × kind of deviation × column | `hospital_id`, `kind`, `column` | 9 |
 | `files` | hospital (its current source file) | `hospital_id` | 3 |
-| `rpt_nppes_file_log` | NPPES file the CDC applied or refused, in order | `seq` | ‹N› |
+| `rpt_nppes_file_log` | NPPES file the CDC applied or refused, in order | `seq` | 5 |
 | `dim_modifiers` | modifier rule a hospital published | `hospital_id`, `code`, `setting`, `payer_name`, `plan_name` | 37 |
-| `rpt_fhir_summary` | FHIR resource type | `resource_type` | ‹N› |
-| `rpt_fhir_mapping` | FHIR resource type × leaf path | `resource_type`, `path` | ‹N› |
-| `rpt_fhir_code_bridge` | code system on synthetic claim lines | `code_system` | ‹N› |
+| `rpt_fhir_summary` | FHIR resource type | `resource_type` | 24 |
+| `rpt_fhir_mapping` | FHIR resource type × leaf path | `resource_type`, `path` | 639 |
+| `rpt_fhir_code_bridge` | code system on synthetic claim lines | `code_system` | 6 |
 | `rpt_fhir_claim_totals` | synthetic claim type | `claim_type` | 3 |
-| `dim_provider_history` | NPI × version (SCD type 2) | `npi`, `version` | ‹N› |
+| `dim_provider_history` | NPI × version (SCD type 2) | `npi`, `version` | 9,884,252 |
 
 ## The joins that change the grain
 
-**Charges → codes fans out ‹FANOUT›×.** `dim_charge_codes` is one-to-many from an item: an item lists a CPT code, a
+**Charges → codes fans out 3.07×.** `dim_charge_codes` is one-to-many from an item: an item lists a CPT code, a
 revenue code, a chargemaster number and so on, and every charge row of the item carries them all. Joining
-`fct_standard_charges` to `dim_charge_codes` on `item_id` turns 7,371,416 charge rows into ‹XCODES› rows
+`fct_standard_charges` to `dim_charge_codes` on `item_id` turns 7,371,416 charge rows into 22,647,893 rows
 (`derived.charge_x_code_rows`). `count(*)` or `sum(negotiated_rate)` after that join counts each charge once per code.
 Filter the codes to one family first, or count `distinct charge_id`.
 
-One item can even list the same code string twice under different declared types (148 rows in `‹TAG›`), so
+One item can even list the same code string twice under different declared types (148 rows in `data-2026-10-07-67efd3d2`), so
 `(item_id, code)` is not a key; `(item_id, code_seq)` is.
 
-**`agg_code_prices` is finer than hospital + code.** Its 49,404 rows cover ‹PAIRS› hospital-code pairs,
-‹ROWSPERPAIR› rows per pair (`derived.agg_code_prices_rows_per_hospital_code`), because one code is priced separately
+**`agg_code_prices` is finer than hospital + code.** Its 49,404 rows cover 26,770 hospital-code pairs,
+1.85 rows per pair (`derived.agg_code_prices_rows_per_hospital_code`), because one code is priced separately
 per setting (inpatient / outpatient / both / unspecified) and per `rate_basis` (contracted dollar, dollar derived from
 a percentage, …). Joining it to anything at hospital-plus-code grain, or averaging its medians per code, mixes those
 rows and counts each code more than once. Pick one `setting` and one `rate_basis` (usually `'dollar'`) before
 comparing hospitals; never add or average `rate_median` across rows.
 
 `charge_rows` does add up: `sum(charge_rows)` equals the number of distinct charges whose item carries a qualifying
-code (`derived.agg_code_prices_fanout` = ‹AGGFANOUT›), because no charge in this release carries two qualifying codes.
+code (`derived.agg_code_prices_fanout` = 1.0), because no charge in this release carries two qualifying codes.
 If one ever does, that ratio rises above 1.0 in `check_values.json`. The gate `assert_agg_code_prices_match_lines`
 re-derives every row of this table from the charge lines, in both directions: header rows without lines, lines without
 a header row, a count off by one, or a rate off by more than half a cent all fail the run.
@@ -60,12 +60,12 @@ a header row, a count off by one, or a rate off by more than half a cent all fai
 whole table counts every NPI twice (16 disclosed NPIs instead of 8). Filter `hospital_id = 'ALL'`, or exclude it.
 
 **NULL is part of the `dim_modifiers` key.** A modifier published at file level has no setting, payer or plan, so
-those key columns are NULL on every row of `‹TAG›`. The grain gate groups NULLs together, so two file-level rules for
+those key columns are NULL on every row of `data-2026-10-07-67efd3d2`. The grain gate groups NULLs together, so two file-level rules for
 the same code would still fail it. In SQL, `col = NULL` matches nothing: join on `IS NOT DISTINCT FROM`.
 
 ## `dim_provider_history`: the NPPES change history
 
-One row per NPI per version, ‹HIST› rows over ‹NPIS› NPIs. All entity types are kept: `1` individual, `2`
+One row per NPI per version, 9,884,252 rows over 9,839,369 NPIs. All entity types are kept: `1` individual, `2`
 organization, and NULL for NPIs first seen as a deactivation notice, which NPPES publishes with every field but the
 NPI and date blank. NPPES is a public registry; CMS publishes all of it.
 
@@ -91,7 +91,7 @@ JOIN 'https://github.com/tjromack/clear-pricer/releases/latest/download/dim_prov
  AND b.valid_from < coalesce(a.valid_to, DATE '9999-12-31');   -- 0
 ```
 
-‹ZEROLEN› version is zero-length (`valid_from = valid_to`): NPI `1801771704`, inserted and updated on the same day. The NPPES
+One version is zero-length (`valid_from = valid_to`): NPI `1801771704`, inserted and updated on the same day. The NPPES
 full file overlaps the next weekly file by a day (drift log, 2026-09-29). A zero-length version is valid on no day,
 so it never answers an as-of query.
 

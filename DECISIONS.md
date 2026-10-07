@@ -403,6 +403,12 @@ dollars are the same unit across hospitals.
   found).
 - **Residual risk, stated:** all three schedules are GitHub's, so a platform-wide scheduling outage defeats all of
   them. If the watchdog's own schedule is dropped, detection waits for the next day.
+- **Correction (2026-10-07): the run was late, not dropped.** A week of run history shows a scheduled pipeline run
+  started at 16:49 UTC on 2026-09-30, 5h32m after 11:17. It was declared missing at 4h43m. Every scheduled event since
+  has fired, 21 of 21, all late: the 11:17 slot by 3h51m–8h19m, the 23:47 slot by 2h32m–3h33m, the watchdog by
+  2h31m–5h42m. The decision stands: drops are documented, and the watchdog monitors the outcome either way. Its 26 h
+  threshold covers the observed lateness, since the longest gap between successful runs this week was 17h12m. What
+  changes is the lesson: before declaring a scheduled run missing, compare against the platform's normal latency.
 
 ## CP-DEC 018 — Reproducible on any day, not just any machine: pin Synthea's end date (2026-09-30)
 **Status:** Decided. **Extends CP-DEC 014.**
@@ -425,5 +431,76 @@ dollars are the same unit across hospitals.
 - *Rejected:* excluding the FHIR tables from the fingerprint (hides the problem); regenerating Synthea only on
   demand (the hosted run has no persistent population, so it must regenerate deterministically).
 
+## CP-DEC 019 — The NPPES change history ships in the release (2026-10-07)
+**Status:** Decided (add-on A3). **Partly reverses CP-DEC 010** ("the registry is not re-served").
+
+- **What changed.** The 9.86M-row SCD2 history (`dim_provider_history`: every version of every NPI, with
+  `valid_from` / `valid_to` / `is_current`) is now a release Parquet file. Before, it lived only in the local CDC
+  state DB: the as-of join behind the reconciliation, and the history's no-overlap invariants, could be checked only
+  by someone who ran the 1.2 GB NPPES sync.
+- **Why CP-DEC 010's reason no longer holds for the release.** CMS publishes *snapshots* (a monthly full file, weekly
+  deltas). It does not publish the *history*: which version of a provider was valid on a given day. That history is
+  what this project adds, so it belongs with the rest of its output. The release on 2026-10-05 made the gap concrete:
+  a weekly delta was applied and only `rpt_nppes_file_log` changed in the release. The history it updated was
+  invisible.
+- **Not served from a database.** It ships as Parquet only, not to Supabase: 561 MB zstd against a 500 MB free tier,
+  and the per-NPI query a reader needs works over HTTPS. The file is sorted by `npi, version`, so a filter on one NPI
+  reads a few row groups.
+- **Gated as a release table.** One current version per NPI; versions 1..n (existing). New: each closed version ends
+  on the day the next starts, and no two versions are valid on the same day (half-open intervals). Both are gated in
+  dbt and recomputed by `verify-release`.
+- **Cost, stated.** The release grows from ~120 MB to ~680 MB. A release is cut whenever NPPES publishes (weekly),
+  which was already true via the file log. A cache eviction on the runner rebuilds the history from the files CMS
+  still lists, and that shows as a new release.
+- *Rejected:* type-2 organizations only (the reconciliation uses the full registry, and the deactivation stubs have
+  no entity type); serving it in Supabase (size, and no consumer needs it over REST).
+
+## CP-DEC 020 — Every release table has a proved grain; every release carries its check values (2026-10-07)
+**Status:** Decided (add-on A3).
+
+- **Grain is a contract, not a comment.** `clear_pricer/checks.py: RELEASE_GRAIN` names the key of every release
+  table. Each key is a dbt gate (generic `grain` test: GROUP BY the key, return groups with more than one row; NULLs
+  group together, so a NULL key part can't hide a duplicate). `docs/grain.md` documents each table and the joins
+  that change grain. A pytest fails if the Python contract, the dbt gates and the doc ever disagree.
+- **Export order = grain key.** The key is gated unique, so it is a total order; it replaces `ORDER BY ALL`.
+- **`check_values.json` per release:** rows and distinct keys per table; the charges -> codes fan-out; the
+  `agg_code_prices` coverage and rows-per-hospital-code; money checksums in integer cents (`sum(round(x * 100))`:
+  a float sum depends on summation order); the history invariants; the reconciliation headline. Its hash is in the
+  manifest. It is not in the fingerprint, because it is derived from the outputs that already are.
+- **Computed three times by one function.** At export, from the warehouse *and* from the Parquet just written: they
+  must match or nothing is published (catches a type changing on the way out, the HUGEINT -> DOUBLE class of bug).
+  Then `clear-pricer verify-release` recomputes them from a clean download via curl, and `pipeline.yml` runs it after
+  every release step. Tested against tampering: a flipped byte, a file rewritten with a matching manifest hash, an
+  edited check value.
+- **The numbers double as an answer key** for anyone drilling SQL on the release (the portfolio's SQL Drill Lab
+  uses a pinned tag).
+- *Rejected:* recording check values in the README (copies drift; the playbook's monthly sweep exists because of
+  that); hash-only verification (proves the bytes, not that the bytes mean what the docs say).
+
+## CP-DEC 021 — Header vs lines: gate what the pipeline owns, publish what the source does (2026-10-07)
+**Status:** Decided (add-on A3). Applies the CP-DEC 007 split (integrity gates fail; source findings are
+published) to header-vs-lines checks.
+
+- **Two gates, both directions, money with a half-cent tolerance, rows only on mismatch.**
+  `assert_agg_code_prices_match_lines` re-derives every `agg_code_prices` row from the charge lines. It fails on a
+  header row with no lines, lines with no header row, a count off by one, or a min/max rate off by more than half a
+  cent. `assert_fhir_claims_match_eobs` fails if:
+  - a claim line has no claim, or a claim has no lines;
+  - a claim's EOB is missing, duplicated or orphaned;
+  - an EOB total differs from its claim total.
+- **What the check found in the source.** Synthea's `Claim.total` does not equal the sum of its `item.net`:
+  - pharmacy claims carry no `net` on their line;
+  - on priced professional and institutional claims, the header sits above the lines on most claims and below on
+    some.
+
+  That is the generator's cost model, not a parse error. The EOB total matches the claim total on every claim, which
+  suggests our field mapping is right. It is published as `rpt_fhir_claim_totals` (in the release and served) and
+  logged in the drift log, not gated: gating it would fail every run on a pinned, unchanging input.
+- **Why the claim/EOB equality is a gate even though it is a source property.** The Synthea input is pinned
+  (version, jar hash, seed, end date: CP-DEC 012, 018). A break could only come from our parsing, or from a
+  deliberate version bump, which should stop the run.
+- *Rejected:* a hard gate on Claim.total = sum(item.net) (fails on a property of the source); dropping the check
+  because the source fails it (the disagreement is a finding worth publishing).
+
 ---
-*Next entry = CP-DEC 019.*
+*Next entry = CP-DEC 022.*

@@ -93,12 +93,15 @@ print(c.sql('select rate_basis, count(*) from fct_standard_charges group by 1'))
 | `dim_modifiers` | payer-specific modifier rules published at file level (JSON sources) |
 | `stg_hpt__files` | one row per source file: SHA-256, template version, Type-2 NPIs, row counts |
 | `dim_providers_current` | the NPPES registry as of the latest applied file, one row per NPI (deactivations included) |
-| `stg_nppes__provider_history` | NPPES SCD2 history: every version of every provider, with `valid_from`/`valid_to` |
+| `dim_provider_history` | NPPES SCD2 history: every version of every provider, with `valid_from`/`valid_to` (in the release) |
 | `rpt_nppes_file_log` | every NPPES file applied, and what it changed (inserted / updated / deactivated / stale) |
 | `rpt_npi_reconciliation` | the headline: unresolved-NPI rate + disclosure coverage, per hospital and overall |
 | `rpt_npi_resolution` / `rpt_npi_completeness` | the evidence behind it, NPI by NPI |
 | `rpt_fhir_summary` / `rpt_fhir_mapping` | the synthetic FHIR path: what was parsed, what was mapped (measured), what wasn't |
 | `fct_fhir_claim_lines` / `rpt_fhir_code_bridge` | synthetic claim lines, and how many share a code system with real price files |
+| `rpt_fhir_claim_totals` | synthetic claim headers vs their lines, per claim type (a measured source finding) |
+
+One row of each, and the key that proves it: [docs/grain.md](docs/grain.md).
 
 Offline, or to watch a gate fail: `clear-pricer run rush --source-file tests/fixtures/broken_ragged_rows.csv`.
 
@@ -120,8 +123,9 @@ Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned i
 - **Reproducible across machines:** a GitHub runner (Linux) and a workstation (Windows) independently built the same
   release, fingerprint `27a340045c24de0f…`, with all 13 Parquet files byte-identical. A fresh container with no clone
   and no credentials queried it over HTTPS, including the full 7.37M-row fact.
-- **Quality gates that fail the run** (not warn): 80 dbt checks, covering row reconciliation, keys, enums, CMS
-  required columns, the CDC history's invariants and the reconciliation's own rules. A deliberately broken input turns
+- **Quality gates that fail the run** (not warn): 63 dbt tests, covering row reconciliation, keys, enums, CMS
+  required columns, the CDC history's invariants, the reconciliation's own rules, a proved grain key on every release
+  table, and header-vs-lines checks in both directions. A deliberately broken input turns
   the Airflow run red, and publish never runs (run `broken_input_proof_1`).
 - **NPI reconciliation, both directions** ([docs/results/npi-reconciliation.md](docs/results/npi-reconciliation.md)):
   **unresolved-NPI rate 0.0%** (8 of 8 disclosed Type 2 NPIs resolve, all verified). **Disclosure coverage 13.3%**:
@@ -129,14 +133,19 @@ Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned i
   ZIPs (46–65 across the threshold sensitivity band), published as evidence-backed candidates.
 - **Publisher conformance, measured:** e.g. 92.8% of Northwestern's payer rows report a median over zero claims;
   55.9% of its dollar-plus-percentage rates don't reconcile. See `rpt_source_conformance`.
-- **A schema-drift log** ([docs/schema-drift-log.md](docs/schema-drift-log.md)): 22 upstream deviations, each with
+- **A release that verifies itself:** every release ships `check_values.json` (rows, distinct keys, the
+  charges-to-codes fan-out, integer-cent checksums, the provider history's interval invariants), computed from the
+  warehouse and from the written Parquet, which must agree. `clear-pricer verify-release --tag latest` recomputes it
+  from a clean download, and the hosted pipeline runs that after every release. Grain of every table:
+  [docs/grain.md](docs/grain.md).
+- **A schema-drift log** ([docs/schema-drift-log.md](docs/schema-drift-log.md)): 23 upstream deviations, each with
   when it was found and how the pipeline handles it (record, never drop).
 - **Parity:** every publish checks counts, distinct keys and money sums between DuckDB and the served Postgres, and
   a mismatch fails the run.
 - **Price variation** ([docs/analysis/price-variation.md](docs/analysis/price-variation.md)): every number computed
   from a pinned release by one command; tests enforce its method.
-- **Synthetic FHIR, validated** ([docs/results/fhir-mapping.md](docs/results/fhir-mapping.md)): 240,237 Synthea
-  R4 resources; every one of 1,200,521 references resolves; a gate fails the run if any patient lacks Synthea's
+- **Synthetic FHIR, validated** ([docs/results/fhir-mapping.md](docs/results/fhir-mapping.md)): 239,818 Synthea
+  R4 resources (release `data-2026-10-07-67efd3d2`); every reference resolves (gated); a gate fails the run if any patient lacks Synthea's
   synthetic markers (no PHI, by construction and by test).
 - **Idempotency, proven:** restaging a file yields byte-identical Parquet; re-applying every NPPES file leaves the
   9.86M-row history identical.
@@ -144,7 +153,7 @@ Measured, not asserted (as of 2026-09-29; every figure regenerates from pinned i
 ## Stack
 
 Python · DuckDB · dbt-core · Airflow 3 · Postgres (Docker) / Supabase (served) · FastAPI · pyarrow / ijson · Synthea ·
-Docker · GitHub Actions. See `DECISIONS.md` (CP-DEC 001–018) for why each choice was made.
+Docker · GitHub Actions. See `DECISIONS.md` (CP-DEC 001–021) for why each choice was made.
 
 ## License
 

@@ -40,7 +40,32 @@ fetches the columns and row groups a query touches.
 | `files.parquet` | the source files: SHA-256, template version, publish date, disclosed NPIs |
 | `rpt_nppes_file_log.parquet` | every NPPES file applied by the CDC and what it changed |
 | `rpt_fhir_summary` / `rpt_fhir_mapping` / `rpt_fhir_code_bridge` | the synthetic FHIR path: coverage, unmapped fields, code overlap |
+| `rpt_fhir_claim_totals.parquet` | synthetic claim headers vs their lines, per claim type (a measured source finding) |
+| `dim_provider_history.parquet` | the NPPES change history: every version of every NPI, `valid_from` / `valid_to` (~560 MB) |
 | `manifest.json` | row counts, sizes, SHA-256 of every file, and the pinned inputs |
+| `check_values.json` | rows and distinct keys per table, fan-out, integer-cent checksums, history invariants |
+
+**Grain before SQL.** What one row of each file means, its key, and the joins that multiply rows (charges → codes,
+`agg_code_prices` vs hospital + code) are in [grain.md](grain.md).
+
+**The provider history** is sorted by NPI, so asking about one provider reads a few row groups of the 560 MB file:
+
+```python
+# who was this NPI on 2026-06-30? (half-open intervals: valid_from <= d < valid_to; NULL valid_to = current)
+duckdb.sql(f"""
+    SELECT npi, version, org_name, status, valid_from, valid_to
+    FROM '{R}/dim_provider_history.parquet'
+    WHERE npi = '1497859649'
+      AND valid_from <= DATE '2026-06-30' AND (valid_to IS NULL OR DATE '2026-06-30' < valid_to)
+""").show()
+```
+
+**Check a release yourself** (needs a clone; downloads with `curl`, recomputes every check value, exits non-zero on any
+mismatch):
+
+```bash
+clear-pricer verify-release --tag latest
+```
 
 **Reading `negotiated_rate`:** it is the hospital's dollar figure whenever one is published, and `rate_basis` says
 where it came from: `dollar` (contracted), `dollar_from_percent` (a percentage applied to the chargemaster price),

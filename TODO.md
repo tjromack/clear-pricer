@@ -93,15 +93,35 @@ Decisions already settled (do not re-open): `DECISIONS.md` CP-DEC 001–004.
 - [x] v1/v2 scope recorded (CP-DEC 016): v1 shipped with v2's features at three-hospital scale; v2 = scale-out
 - [x] **stop**
 
+## Add-on A3 — make the release drillable (portfolio playbook v3) ✅ (2026-10-07)
+- [x] Publish the NPPES provider history (9.86M rows, validity columns) as a release Parquet — CP-DEC 019
+- [x] `docs/grain.md`: one row per what + the proved key, for every release table; `agg_code_prices` called out
+  (finer than hospital + code: 1.85 rows per pair); the charges -> codes fan-out (3.07x)
+- [x] Grain keys gated: generic dbt `grain` test on all 15 release tables; a pytest keeps code, dbt and doc in step
+- [x] `check_values.json` per release (rows, distinct keys, fan-out, integer-cent checksums, history invariants);
+  warehouse == Parquet at export, or nothing ships — CP-DEC 020
+- [x] `clear-pricer verify-release`: recompute from a clean download (curl); runs in `pipeline.yml` after release
+- [x] Header-vs-lines gates, both directions, half-cent tolerance: `agg_code_prices` vs charge lines; FHIR claims vs
+  items and EOBs. Synthea's own total-vs-items disagreement published as `rpt_fhir_claim_totals` — CP-DEC 021
+- [x] History no-overlap gate: contiguous versions, no two versions valid on one day
+- [x] Mutation tests: every new gate catches planted defects; verify catches a flipped byte, a rewritten file with a
+  matching manifest hash, an edited check value
+- [x] **Gate:** the release's check values recompute from a clean download (hosted run) — see BUILD-LOG 2026-10-07
+
 ## Later / maybe
 - [ ] v2 scale-out: 50+ hospitals through the same gates (CP-DEC 016); more metros
 - [ ] publicly hosted API (FastAPI) — a hosting decision
 - [ ] FHIR ExplanationOfBenefit adjudication (payment detail; 5.3% mapped today)
 - [ ] NPPES secondary practice locations (widens NPI completeness matching)
 - [ ] per-hospital "comparable-price share" tracked across releases
-- [ ] confirm the Supabase free-tier project stays active under the daily run (still active after night 1)
+- [ ] confirm the Supabase free-tier project stays active under the daily run (published daily through 2026-10-07)
 - [x] schedule resilience after night 1's dropped run: second daily slot + freshness watchdog (CP-DEC 017)
-- [ ] observe a week of unattended runs; confirm the watchdog stays green on healthy days
+- [x] observe a week of unattended runs: 21 of 21 scheduled events fired (all 2.5–8.3 h late), every run green;
+  night 1's "dropped" run was 5h32m late (CP-DEC 017 correction)
 - [x] pin Synthea's end date so output is independent of the day it runs (CP-DEC 018)
-- [ ] confirm the first *scheduled* run fires and reproduces fingerprint `78bc6a4f` with no new release
+- [x] confirm the first *scheduled* run fires and reproduces fingerprint `78bc6a4f` with no new release (it did;
+  the next release came from a real NPPES weekly on 2026-10-05)
+- [ ] regenerate `docs/results/fhir-mapping.md` for the pinned-end-date population (it still shows the 2026-09-29
+  population: 240,237 resources; the current release has 239,818). Needs Synthea locally, i.e. Docker Desktop running
+- [ ] skip the 5 GB NM re-download on hosted runs when the ETag is unchanged (34 of 43 min per run)
 - [ ] alerting beyond GitHub's failed-run email (e.g. a webhook), if one inbox proves too easy to miss
