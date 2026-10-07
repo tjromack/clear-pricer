@@ -60,6 +60,10 @@ import duckdb
 duckdb.sql("SELECT * FROM 'https://github.com/tjromack/clear-pricer/releases/latest/download/rpt_npi_reconciliation.parquet'").show()
 ```
 
+**From an AI assistant:** [clear-pricer-mcp](https://github.com/tjromack/clear-pricer-mcp) serves a pinned release as
+read-only MCP tools, with every row cited to the hospital's source file:
+`claude mcp add clear-pricer -- npx -y clear-pricer-mcp`.
+
 ## Quickstart (clone and run)
 
 No cloud credentials. Needs Python 3.11+ and `curl` (on PATH by default on Windows 10+, macOS and Linux).
