@@ -807,10 +807,11 @@ release"). A1, A2 and A4 belong to other repos and were not touched here.
 
 ### History rewrite (same day)
 - At Trevor's request, the study guide committed by mistake on 2026-09-30 was removed from git history. With
-  `git filter-branch --index-filter 'git rm --cached …'`, the six commits from `343a2a0` on were rewritten (the trees
-  are otherwise identical; the final tree is byte-for-byte unchanged), and `main` was force-pushed.
-  - Old → new: `343a2a0`→`295dad5`, `6017086`→`94be49d`, `d75c3d5`→`3a40249`, `5204559`→`e1bf4cb`,
-    `8be7e5c`→`0e55b4f`. The index above cites the new hashes.
+  `git filter-branch --index-filter 'git rm --cached …'`, the six commits from the 2026-09-30 Synthea end-date pin on
+  were rewritten (the trees are otherwise identical; the final tree is byte-for-byte unchanged), and `main` was
+  force-pushed.
+  - The index above cites the new hashes. The old ones are deliberately not recorded: GitHub resolves short SHAs, so
+    listing them would point at the orphaned commits.
   - **Three release tags pointed into the rewritten range** (`data-2026-09-30-78bc6a4f`, `data-2026-10-05-837b70ec`,
     `data-2026-10-07-67efd3d2`). Left alone, they would have kept the old commits, and the files, reachable, so each
     was moved to its rewritten twin. The release assets are attached to the release, not the commit, so nothing a
