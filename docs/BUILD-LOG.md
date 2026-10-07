@@ -20,7 +20,7 @@ Entry template: **What happened · Decisions · Learnings · What broke (+ fix) 
 | 7 · the analysis | `b9d46f3` | list 2.11× median across 2,323 codes; within-UChicago payer spread 4.06× vs 1.55× Rush–UChicago | a first cut made Rush "most expensive" — 39,116 MA rates published at list price |
 | 8 · case study | `100fd91` | `docs/CASE-STUDY.md`, with the drift log (21 entries) as its spine; every number checked against its source | two case-study claims were stronger than their evidence; tightened before shipping |
 | night 1 · unattended | `343a2a0` | watchdog proven both ways; release rebuilt with pinned Synthea end date (`78bc6a4f`) | the first scheduled run looked dropped (it was 5h32m late — corrected 2026-10-07), and a catch-up run cut a spurious release (Synthea's end date = today) |
-| A3 · drillable release | ‹A3COMMIT› | `data-2026-10-07-67efd3d2`: 15 files + check values, verified from a clean download; 63 gates; fan-out 3.07× | the week's run history showed night 1's "dropped" run was late; header vs lines found 0 of 21,785 synthetic claims add up |
+| A3 · drillable release | `5204559` · `8be7e5c` | `data-2026-10-07-67efd3d2`: 15 files + check values, verified from a clean download; 63 gates; fan-out 3.07× | the week's run history showed night 1's "dropped" run was late; header vs lines found 0 of 21,785 synthetic claims add up |
 
 Where things are: decisions → `DECISIONS.md` (CP-DEC 001–021) · grain → `docs/grain.md` · upstream deviations → `docs/schema-drift-log.md` ·
 reproducible figures → `docs/results/` (`clear-pricer report`) · the analysis → `docs/analysis/` · the case study → `docs/CASE-STUDY.md` · how to query → `docs/QUERY.md`.
