@@ -75,7 +75,7 @@ the current version, and exactly one version per NPI is current. As of a date:
 ```sql
 SELECT * FROM dim_provider_history
 WHERE npi = '1497859649'                                 -- a Northwestern NPI
-  AND valid_from <= DATE '2026-06-30' AND (valid_to IS NULL OR DATE '2026-06-30' < valid_to);
+  AND valid_from <= DATE '2026-10-01' AND (valid_to IS NULL OR DATE '2026-10-01' < valid_to);
 ```
 
 **Two gates prove the history.** Each closed version ends on the day the next one starts, and no two versions of

@@ -51,12 +51,12 @@ fetches the columns and row groups a query touches.
 **The provider history** is sorted by NPI, so asking about one provider reads a few row groups of the 560 MB file:
 
 ```python
-# who was this NPI on 2026-06-30? (half-open intervals: valid_from <= d < valid_to; NULL valid_to = current)
+# who was this NPI on 2026-10-01? (half-open intervals: valid_from <= d < valid_to; NULL valid_to = current)
 duckdb.sql(f"""
     SELECT npi, version, org_name, status, valid_from, valid_to
     FROM '{R}/dim_provider_history.parquet'
     WHERE npi = '1497859649'
-      AND valid_from <= DATE '2026-06-30' AND (valid_to IS NULL OR DATE '2026-06-30' < valid_to)
+      AND valid_from <= DATE '2026-10-01' AND (valid_to IS NULL OR DATE '2026-10-01' < valid_to)
 """).show()
 ```
 
